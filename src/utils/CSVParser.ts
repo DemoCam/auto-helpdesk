@@ -102,7 +102,7 @@ export const parseCSV = (file: File): Promise<ReportRow[]> => {
 
           resolve(mappedRows);
         },
-        error: (error) => reject(`Error al parsear CSV: ${error.message}`)
+        error: (error: any) => reject(`Error al parsear CSV: ${error.message}`)
       });
     };
     reader.onerror = () => reject('Error al leer el archivo.');

@@ -9,7 +9,6 @@ import JSZip from 'jszip';
 
 /* ─── Color palette from PPTX ─── */
 const PPTX_GREEN = '#00B050';
-const PPTX_BLUE = '#0070C0';
 
 const PIE_GREENS = [
   '#0D4D2B', '#145E34', '#1B7040', '#22824D', '#2E9960',
