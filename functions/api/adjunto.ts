@@ -94,7 +94,6 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
 
       const data = (await response.json()) as SdpSearchResponse;
       const results = (data.requests || [])
-        .filter((r) => r.subject && COMUNICADO_REGEX.test(r.subject))
         .map((r) => ({
           id: r.id,
           displayId: r.display_id,
@@ -164,7 +163,6 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
 
       const data = (await response.json()) as SdpSearchResponse;
       const results = (data.requests || [])
-        .filter((r) => r.subject && COMUNICADO_REGEX.test(r.subject))
         .map((r) => ({
           id: r.id,
           displayId: r.display_id,
