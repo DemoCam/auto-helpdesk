@@ -94,6 +94,7 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
 
       const data = (await response.json()) as SdpSearchResponse;
       const results = (data.requests || [])
+        .filter((r) => r.subject && COMUNICADO_REGEX.test(r.subject))
         .map((r) => ({
           id: r.id,
           displayId: r.display_id,
@@ -110,29 +111,15 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
       const inputData = {
         list_info: {
           start_index: 1,
-          row_count: 50,
+          row_count: 100,
           sort_field: "created_time",
           sort_order: "desc",
           fields_required: ["display_id", "subject", "created_time", "status"],
-          search_criteria: [
-            {
-              field: "status.name",
-              condition: "is",
-              value: "Open",
-              logical_operator: "OR"
-            },
-            {
-              field: "status.name",
-              condition: "is",
-              value: "On hold",
-              logical_operator: "OR"
-            },
-            {
-              field: "status.name",
-              condition: "is",
-              value: "En espera" // Just in case it's localized
-            }
-          ]
+          search_criteria: {
+            field: "subject",
+            condition: "contains",
+            value: "COMUNICADO"
+          }
         },
       };
 
@@ -161,9 +148,13 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
         throw new Error(`SDP active list error: ${response.status} - ${errText}`);
       }
 
-      const data = (await response.json()) as SdpSearchResponse;
+      const data = (await response.json()) as any;
+      const validStatuses = ["open", "on hold", "en espera"];
+      
       const results = (data.requests || [])
-        .map((r) => ({
+        .filter((r: any) => r.subject && COMUNICADO_REGEX.test(r.subject))
+        .filter((r: any) => r.status && r.status.name && validStatuses.includes(r.status.name.toLowerCase()))
+        .map((r: any) => ({
           id: r.id,
           displayId: r.display_id,
           subject: r.subject,
