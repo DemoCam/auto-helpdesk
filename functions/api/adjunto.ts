@@ -156,8 +156,9 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
         return errorResponse(env, 400, "requestId y attachmentId requeridos.");
       }
 
-      let response = await fetch(
-        `${SDP_BASE_URL}/requests/${requestId}/attachments/${attachmentId}/_download`,
+      // OBTENER METADATOS DEL ADJUNTO PARA VER CÓMO DESCARGARLO
+      let metaResponse = await fetch(
+        `${SDP_BASE_URL}/requests/${requestId}/attachments/${attachmentId}`,
         {
           method: "GET",
           headers: {
@@ -166,7 +167,10 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
           },
         }
       );
+      const metaText = await metaResponse.text();
+      throw new Error(`DEBUG META: ${metaResponse.status} - ${metaText}`);
 
+      /*
       if (response.status === 401) {
         accessToken = await forceRefreshToken(env);
         response = await fetch(
@@ -200,6 +204,7 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
           ...corsHeaders(env),
         },
       });
+      */
     }
 
     return errorResponse(env, 400, "Acción no reconocida. Use: search, list, download.");
