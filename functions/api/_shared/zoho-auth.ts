@@ -17,6 +17,9 @@ export interface ZohoEnv {
  * Obtiene un Access Token válido. Primero busca en KV, si no existe lo genera.
  */
 export async function getAccessToken(env: ZohoEnv): Promise<string> {
+  if (!env.KV_ZOHO) {
+    throw new Error("FATAL: KV_ZOHO is undefined! The KV namespace binding is missing or not configured correctly in Cloudflare Dashboard.");
+  }
   let token = await env.KV_ZOHO.get("ACCESS_TOKEN");
   if (token) return token;
 
@@ -34,7 +37,9 @@ export async function forceRefreshToken(env: ZohoEnv): Promise<string> {
   const token = await refreshAccessToken(env);
   if (!token) throw new Error("No se pudo refrescar el access token de Zoho.");
 
-  await env.KV_ZOHO.put("ACCESS_TOKEN", token, { expirationTtl: TOKEN_TTL_SECONDS });
+  if (env.KV_ZOHO) {
+    await env.KV_ZOHO.put("ACCESS_TOKEN", token, { expirationTtl: TOKEN_TTL_SECONDS });
+  }
   return token;
 }
 
@@ -42,6 +47,9 @@ export async function forceRefreshToken(env: ZohoEnv): Promise<string> {
  * Llama a Zoho Accounts para obtener un nuevo access token vía refresh_token.
  */
 async function refreshAccessToken(env: ZohoEnv): Promise<string | null> {
+  if (!env.ZOHO_CLIENT_ID || !env.ZOHO_CLIENT_SECRET || !env.ZOHO_REFRESH_TOKEN) {
+    throw new Error("FATAL: Faltan credenciales de Zoho en las variables de entorno (ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET o ZOHO_REFRESH_TOKEN).");
+  }
   const body = new URLSearchParams({
     grant_type: "refresh_token",
     client_id: env.ZOHO_CLIENT_ID,

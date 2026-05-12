@@ -199,6 +199,6 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
 
   } catch (error: any) {
     console.error("Adjunto proxy error:", error.message);
-    return errorResponse(env);
+    return errorResponse(env, 500, "Internal Server Error", String(error.stack || error.message || error));
   }
 }
