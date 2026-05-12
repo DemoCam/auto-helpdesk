@@ -158,7 +158,7 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
 
       // IMPORTANTE: NO enviar Accept de SDP v3 para descarga binaria
       let response = await fetch(
-        `${SDP_BASE_URL}/requests/${requestId}/attachments/${attachmentId}/download`,
+        `${SDP_BASE_URL}/requests/${requestId}/attachments/${attachmentId}/_download`,
         {
           method: "GET",
           headers: {
@@ -170,7 +170,7 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
       if (response.status === 401) {
         accessToken = await forceRefreshToken(env);
         response = await fetch(
-          `${SDP_BASE_URL}/requests/${requestId}/attachments/${attachmentId}/download`,
+          `${SDP_BASE_URL}/requests/${requestId}/attachments/${attachmentId}/_download`,
           {
             method: "GET",
             headers: {
@@ -202,6 +202,6 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
 
   } catch (error: any) {
     console.error("Adjunto proxy error:", error.message);
-    return errorResponse(env, 500, "Internal Server Error", String(error.stack || error.message || error));
+    return errorResponse(env, 500, "Internal Server Error");
   }
 }

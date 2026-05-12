@@ -119,14 +119,8 @@ export function validateOrigin(request: Request, env: ZohoEnv): Response | null 
 /**
  * Crea una respuesta de error segura (sin exponer detalles internos).
  */
-export function errorResponse(env: ZohoEnv, status = 500, publicMsg = "Internal Server Error", rawError?: any): Response {
-  // Solo devolvemos el rawError en la respuesta para facilitar el debugging
-  // Una vez que funcione, deberíamos quitar rawError
-  const errorPayload = { 
-    error: publicMsg,
-    details: rawError ? String(rawError) : undefined 
-  };
-  return new Response(JSON.stringify(errorPayload), {
+export function errorResponse(env: ZohoEnv, status = 500, publicMsg = "Internal Server Error"): Response {
+  return new Response(JSON.stringify({ error: publicMsg }), {
     status,
     headers: { "Content-Type": "application/json", ...corsHeaders(env) },
   });

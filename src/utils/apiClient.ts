@@ -37,7 +37,6 @@ async function fetchFromProxy<T>(
 
   if (!response.ok) {
     const errorBody = await response.json().catch(() => ({ error: "Error desconocido" }));
-    console.error("🛑 ERROR DETALLADO DEL PROXY:", errorBody);
     throw new ApiError(response.status, (errorBody as any).error || `HTTP ${response.status}`);
   }
 
