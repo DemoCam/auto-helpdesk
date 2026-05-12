@@ -11,3 +11,6 @@ directory = "dist"
 [[kv_namespaces]]
 binding = "KV_ZOHO"
 id = "dd58f8f1742d4943b8faaeb3912700ce"
+
+[vars]
+ALLOWED_ORIGIN = "https://auto-helpdesk.camilovalenciaburbano2017.workers.dev"
