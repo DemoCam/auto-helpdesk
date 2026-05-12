@@ -129,8 +129,8 @@ function findSheetByName(workbook: XLSX.WorkBook, targetName: string): string {
 /**
  * Lee la hoja HASH del workbook y extrae las filas válidas.
  */
-export function readHashSheet(workbook: XLSX.WorkBook, filename: string): HashProcessResult {
-  const description = filename.replace(/\.xlsx$/i, "");
+export function readHashSheet(workbook: XLSX.WorkBook, filename: string, subject?: string): HashProcessResult {
+  const description = subject || filename.replace(/\.xlsx$/i, "");
   const comunicadoNumber = extractComunicadoNumber(filename);
   const warnings: string[] = [];
 
@@ -308,8 +308,8 @@ function deduplicatePreservingOrder(values: string[]): string[] {
 /**
  * Lee la hoja IP del workbook y extrae las IPs únicas.
  */
-export function readIpSheet(workbook: XLSX.WorkBook, filename: string): IpProcessResult {
-  const ruleName = filename.replace(/\.xlsx$/i, "");
+export function readIpSheet(workbook: XLSX.WorkBook, filename: string, subject?: string): IpProcessResult {
+  const ruleName = subject || filename.replace(/\.xlsx$/i, "");
   const comunicadoNumber = extractComunicadoNumber(filename);
   const warnings: string[] = [];
 

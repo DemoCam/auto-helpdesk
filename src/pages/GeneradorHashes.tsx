@@ -73,7 +73,7 @@ const GeneradorHashes: React.FC<Props> = ({ showNotification }) => {
       const { buffer, filename } = await downloadAttachment(String(requestId), String(attachment.id));
       const finalName = attachment.name || filename || `${subject}.xlsx`;
       store.setFile(finalName, buffer);
-      processExcelBuffer(buffer, finalName);
+      processExcelBuffer(buffer, finalName, subject);
     } catch (err: any) {
       store.setProcessStatus('error');
       store.setErrorMessage(err.message);
@@ -100,7 +100,7 @@ const GeneradorHashes: React.FC<Props> = ({ showNotification }) => {
   }, [showNotification]);
 
   // ═══ Core processing ═══
-  const processExcelBuffer = useCallback((buffer: ArrayBuffer, filename: string) => {
+  const processExcelBuffer = useCallback((buffer: ArrayBuffer, filename: string, subject?: string) => {
     try {
       const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' });
       const allWarnings: string[] = [];
@@ -110,7 +110,7 @@ const GeneradorHashes: React.FC<Props> = ({ showNotification }) => {
       // Process HASH sheet
       if (store.generateHashes) {
         try {
-          hashResult = readHashSheet(workbook, filename);
+          hashResult = readHashSheet(workbook, filename, subject);
           if (hashResult.warnings.length > 0) allWarnings.push(...hashResult.warnings);
           const csvFiles = generateAllCsvs(hashResult);
           store.setHashResults(hashResult.validRows, csvFiles);
@@ -122,7 +122,7 @@ const GeneradorHashes: React.FC<Props> = ({ showNotification }) => {
       // Process IP sheet
       if (store.generateIps) {
         try {
-          ipResult = readIpSheet(workbook, filename);
+          ipResult = readIpSheet(workbook, filename, subject);
           if (ipResult.warnings.length > 0) allWarnings.push(...ipResult.warnings);
           const rulesJson = generateRulesJson(ipResult, store.ruleStatus);
           store.setIpResult(ipResult, rulesJson);
