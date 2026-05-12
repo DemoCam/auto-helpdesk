@@ -111,7 +111,8 @@ const GeneradorHashes: React.FC<Props> = ({ showNotification }) => {
 
       if (!hashResult && !ipResult) {
         store.setProcessStatus('error');
-        store.setErrorMessage('No se pudieron procesar ni hashes ni IPs del archivo.');
+        const details = allWarnings.length > 0 ? ` Detalles: ${allWarnings.join(' | ')}` : '';
+        store.setErrorMessage(`No se pudieron procesar ni hashes ni IPs del archivo.${details}`);
         showNotification('Error: no se encontraron datos válidos', 'error');
       } else {
         store.setProcessStatus('success');

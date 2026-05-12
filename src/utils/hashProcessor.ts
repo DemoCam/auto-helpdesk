@@ -97,8 +97,13 @@ function normalizeHeader(value: unknown): string {
 
 export function extractComunicadoNumber(filename: string): string {
   const match = COMUNICADO_REGEX.exec(filename);
-  if (!match) throw new Error(`No se pudo extraer el número de comunicado desde: ${filename}`);
-  return match[1];
+  if (match) return match[1];
+
+  // Fallback: extraer la primera secuencia de números del nombre de archivo (ej. fecha)
+  const fallbackMatch = /\d+/.exec(filename);
+  if (fallbackMatch) return fallbackMatch[0];
+
+  return "XXXX"; // Default si no hay números
 }
 
 function convertNumber(value: unknown): number | null {
