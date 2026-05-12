@@ -156,7 +156,7 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
         return errorResponse(env, 400, "requestId y attachmentId requeridos.");
       }
 
-      // OBTENER METADATOS DEL ADJUNTO PARA VER CÓMO DESCARGARLO
+      // 1. OBTENER METADATOS DEL ADJUNTO PARA EXTRAER EL CONTENT_URL REAL
       let metaResponse = await fetch(
         `${SDP_BASE_URL}/requests/${requestId}/attachments/${attachmentId}`,
         {
@@ -167,14 +167,11 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
           },
         }
       );
-      const metaText = await metaResponse.text();
-      throw new Error(`DEBUG META: ${metaResponse.status} - ${metaText}`);
 
-      /*
-      if (response.status === 401) {
+      if (metaResponse.status === 401) {
         accessToken = await forceRefreshToken(env);
-        response = await fetch(
-          `${SDP_BASE_URL}/requests/${requestId}/attachments/${attachmentId}/_download`,
+        metaResponse = await fetch(
+          `${SDP_BASE_URL}/requests/${requestId}/attachments/${attachmentId}`,
           {
             method: "GET",
             headers: {
@@ -185,26 +182,43 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
         );
       }
 
-      if (!response.ok) {
-        const errText = await response.text();
-        throw new Error(`SDP download error: ${response.status} - ${errText}`);
+      if (!metaResponse.ok) {
+        const errText = await metaResponse.text();
+        throw new Error(`SDP attachment meta error: ${metaResponse.status} - ${errText}`);
+      }
+
+      const metaData = await metaResponse.json() as any;
+      const contentUrl = metaData.request_attachment?.content_url;
+      const originalName = metaData.request_attachment?.name || "comunicado.xlsx";
+
+      if (!contentUrl) {
+        throw new Error("No se encontró content_url en los metadatos del adjunto.");
+      }
+
+      // 2. DESCARGAR EL ARCHIVO BINARIO USANDO EL CONTENT_URL
+      let downloadResponse = await fetch(`${SDP_BASE_URL}${contentUrl}`, {
+        method: "GET",
+        headers: {
+          Authorization: `Zoho-oauthtoken ${accessToken}`,
+        },
+      });
+
+      if (!downloadResponse.ok) {
+        const errText = await downloadResponse.text();
+        throw new Error(`SDP download error: ${downloadResponse.status} - ${errText}`);
       }
 
       // Re-stream el binario al frontend
-      const fileBytes = await response.arrayBuffer();
-      const contentDisposition = response.headers.get("Content-Disposition") || "";
-      const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
-      const filename = filenameMatch ? filenameMatch[1].replace(/['"]/g, "") : "comunicado.xlsx";
+      const fileBytes = await downloadResponse.arrayBuffer();
 
       return new Response(fileBytes, {
         status: 200,
         headers: {
           "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          "Content-Disposition": `attachment; filename="${filename}"`,
+          "Content-Disposition": `attachment; filename="${originalName}"`,
           ...corsHeaders(env),
         },
       });
-      */
     }
 
     return errorResponse(env, 400, "Acción no reconocida. Use: search, list, download.");
