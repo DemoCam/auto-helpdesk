@@ -153,6 +153,7 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
       
       const results = (data.requests || [])
         .filter((r: any) => r.subject && COMUNICADO_REGEX.test(r.subject))
+        .filter((r: any) => r.subject && !r.subject.toLowerCase().includes("vulnerabilidades"))
         .filter((r: any) => r.status && r.status.name && validStatuses.includes(r.status.name.toLowerCase()))
         .map((r: any) => ({
           id: r.id,
