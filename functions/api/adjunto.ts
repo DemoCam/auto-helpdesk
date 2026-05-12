@@ -106,7 +106,76 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
         headers: { "Content-Type": "application/json", ...corsHeaders(env) },
       });
     }
+    // ═══ ACTION: Listar comunicados activos (Open / On hold) ═══
+    if (action === "active") {
+      const inputData = {
+        list_info: {
+          start_index: 1,
+          row_count: 50,
+          sort_field: "created_time",
+          sort_order: "desc",
+          fields_required: ["display_id", "subject", "created_time", "status"],
+          search_criteria: [
+            {
+              field: "status.name",
+              condition: "is",
+              value: "Open",
+              logical_operator: "OR"
+            },
+            {
+              field: "status.name",
+              condition: "is",
+              value: "On hold",
+              logical_operator: "OR"
+            },
+            {
+              field: "status.name",
+              condition: "is",
+              value: "En espera" // Just in case it's localized
+            }
+          ]
+        },
+      };
 
+      const params = new URLSearchParams({ input_data: JSON.stringify(inputData) });
+      let response = await fetch(`${SDP_BASE_URL}/requests?${params.toString()}`, {
+        method: "GET",
+        headers: {
+          Authorization: `Zoho-oauthtoken ${accessToken}`,
+          Accept: "application/vnd.manageengine.sdp.v3+json",
+        },
+      });
+
+      if (response.status === 401) {
+        accessToken = await forceRefreshToken(env);
+        response = await fetch(`${SDP_BASE_URL}/requests?${params.toString()}`, {
+          method: "GET",
+          headers: {
+            Authorization: `Zoho-oauthtoken ${accessToken}`,
+            Accept: "application/vnd.manageengine.sdp.v3+json",
+          },
+        });
+      }
+
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`SDP active list error: ${response.status} - ${errText}`);
+      }
+
+      const data = (await response.json()) as SdpSearchResponse;
+      const results = (data.requests || [])
+        .filter((r) => r.subject && COMUNICADO_REGEX.test(r.subject))
+        .map((r) => ({
+          id: r.id,
+          displayId: r.display_id,
+          subject: r.subject,
+        }));
+
+      return new Response(JSON.stringify({ data: results, status: "success" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json", ...corsHeaders(env) },
+      });
+    }
     // ═══ ACTION: Listar adjuntos de un request ═══
     if (action === "list") {
       const requestId = url.searchParams.get("requestId");

@@ -2,7 +2,7 @@ import React, { useCallback, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 import { useHashStore } from '../store/useHashStore';
-import { searchComunicados, listAttachments, downloadAttachment } from '../utils/apiClient';
+import { searchComunicados, listAttachments, downloadAttachment, fetchActiveComunicados } from '../utils/apiClient';
 import {
   readHashSheet, readIpSheet, generateAllCsvs, generateRulesJson,
   type HashProcessResult, type IpProcessResult
@@ -19,9 +19,33 @@ const GeneradorHashes: React.FC<Props> = ({ showNotification }) => {
   const [activeTab, setActiveTab] = useState<'search' | 'upload'>('search');
   const [selectedRequest, setSelectedRequest] = useState<{ id: number; displayId: string; subject: string } | null>(null);
 
+  // ═══ Load Active comunicados ═══
+  const handleLoadActive = useCallback(async () => {
+    store.setSearchStatus('loading');
+    store.setSearchResults([]);
+    try {
+      const resp = await fetchActiveComunicados();
+      store.setSearchResults(resp.data);
+      store.setSearchStatus('success');
+      if (resp.data.length === 0) showNotification('No hay comunicados activos (Open / On hold)', 'info');
+    } catch (err: any) {
+      store.setSearchStatus('error');
+      showNotification(`Error cargando activos: ${err.message}`, 'error');
+    }
+  }, [store, showNotification]);
+
+  // Auto-load on mount/tab change
+  React.useEffect(() => {
+    if (activeTab === 'search' && store.searchResults.length === 0 && store.searchStatus === 'idle') {
+      handleLoadActive();
+    }
+  }, [activeTab, handleLoadActive]);
+
   // ═══ Search comunicados ═══
   const handleSearch = useCallback(async () => {
-    if (!store.searchQuery.trim()) return;
+    if (!store.searchQuery.trim()) {
+      return handleLoadActive();
+    }
     store.setSearchStatus('loading');
     store.setSearchResults([]);
     try {
@@ -33,7 +57,7 @@ const GeneradorHashes: React.FC<Props> = ({ showNotification }) => {
       store.setSearchStatus('error');
       showNotification(`Error buscando: ${err.message}`, 'error');
     }
-  }, [store.searchQuery, showNotification]);
+  }, [store, showNotification, handleLoadActive]);
 
   // ═══ Download from Zoho ═══
   const handleDownloadFromZoho = useCallback(async (requestId: number, subject: string) => {
@@ -210,8 +234,10 @@ const GeneradorHashes: React.FC<Props> = ({ showNotification }) => {
         {activeTab === 'search' && (
           <div className="hash-search-panel">
             <div className="hash-search-row">
-              <input type="text" placeholder="Número de comunicado (ej. 1533)" value={store.searchQuery} onChange={e => store.setSearchQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSearch()} className="hash-search-input" />
-              <button className="btn-fetch" onClick={handleSearch} disabled={store.searchStatus === 'loading' || !store.searchQuery.trim()}>Buscar</button>
+              <input type="text" placeholder="Buscar un ID específico (deja vacío para recargar activos)" value={store.searchQuery} onChange={e => store.setSearchQuery(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleSearch()} className="hash-search-input" />
+              <button className="btn-fetch" onClick={handleSearch} disabled={store.searchStatus === 'loading'}>
+                {store.searchQuery.trim() ? 'Buscar' : 'Recargar Activos'}
+              </button>
             </div>
             {store.searchResults.length > 0 && (
               <div className="hash-search-results">

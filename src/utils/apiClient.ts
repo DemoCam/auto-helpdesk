@@ -64,6 +64,15 @@ export async function searchComunicados(query: string): Promise<ApiResponse<any[
 }
 
 /**
+ * Obtiene comunicados activos (Open / On hold) automáticamente.
+ */
+export async function fetchActiveComunicados(): Promise<ApiResponse<any[]>> {
+  return fetchFromProxy<ApiResponse<any[]>>("/api/adjunto", {
+    action: "active",
+  });
+}
+
+/**
  * Lista los adjuntos de un request.
  */
 export async function listAttachments(requestId: string): Promise<ApiResponse<any[]>> {
