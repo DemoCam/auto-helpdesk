@@ -47,8 +47,13 @@ export async function forceRefreshToken(env: ZohoEnv): Promise<string> {
  * Llama a Zoho Accounts para obtener un nuevo access token vía refresh_token.
  */
 async function refreshAccessToken(env: ZohoEnv): Promise<string | null> {
-  if (!env.ZOHO_CLIENT_ID || !env.ZOHO_CLIENT_SECRET || !env.ZOHO_REFRESH_TOKEN) {
-    throw new Error("FATAL: Faltan credenciales de Zoho en las variables de entorno (ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET o ZOHO_REFRESH_TOKEN).");
+  const faltan = [];
+  if (!env.ZOHO_CLIENT_ID) faltan.push("ZOHO_CLIENT_ID");
+  if (!env.ZOHO_CLIENT_SECRET) faltan.push("ZOHO_CLIENT_SECRET");
+  if (!env.ZOHO_REFRESH_TOKEN) faltan.push("ZOHO_REFRESH_TOKEN");
+  
+  if (faltan.length > 0) {
+    throw new Error(`FATAL: Faltan credenciales de Zoho en las variables de entorno. Faltan: ${faltan.join(", ")}`);
   }
   const body = new URLSearchParams({
     grant_type: "refresh_token",
