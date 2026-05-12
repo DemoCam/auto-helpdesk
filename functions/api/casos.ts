@@ -100,7 +100,7 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
       if (!response.ok) {
         const errText = await response.text();
         console.error(`Error SDP API (${response.status}):`, errText);
-        throw new Error(`SDP API error: ${response.status}`);
+        throw new Error(`SDP API error: ${response.status} - ${errText}`);
       }
 
       const data = (await response.json()) as SdpListResponse;

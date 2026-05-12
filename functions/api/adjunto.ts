@@ -87,7 +87,10 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
         });
       }
 
-      if (!response.ok) throw new Error(`SDP search error: ${response.status}`);
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`SDP search error: ${response.status} - ${errText}`);
+      }
 
       const data = (await response.json()) as SdpSearchResponse;
       const results = (data.requests || [])
