@@ -53,7 +53,9 @@ async function refreshAccessToken(env: ZohoEnv): Promise<string | null> {
   if (!env.ZOHO_REFRESH_TOKEN) faltan.push("ZOHO_REFRESH_TOKEN");
   
   if (faltan.length > 0) {
-    throw new Error(`FATAL: Faltan credenciales de Zoho en las variables de entorno. Faltan: ${faltan.join(", ")}`);
+    const envKeys = Object.keys(env).join(", ");
+    const hasOrigin = !!env.ALLOWED_ORIGIN;
+    throw new Error(`FATAL: Faltan credenciales de Zoho en las variables de entorno. Faltan: ${faltan.join(", ")}. Keys en env: [${envKeys}]. Tiene ALLOWED_ORIGIN? ${hasOrigin}. Por favor, asegúrate de haber hecho un 'Retry Deployment' en Cloudflare DESPUÉS de guardar las variables.`);
   }
   const body = new URLSearchParams({
     grant_type: "refresh_token",
