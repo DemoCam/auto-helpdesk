@@ -24,10 +24,14 @@ interface ReportStore {
   months: MonthlyData[];
   currentMonth: string;
   previousMonth: string;
+  loading: boolean;
+  error: string | null;
   addMonth: (monthName: string, rows: ReportRow[]) => void;
   removeMonth: (monthName: string) => void;
   setCurrentMonth: (monthName: string) => void;
   setPreviousMonth: (monthName: string) => void;
+  setLoading: (loading: boolean) => void;
+  setError: (error: string | null) => void;
   clearAll: () => void;
 }
 
@@ -42,6 +46,8 @@ export const useReportStore = create<ReportStore>((set) => ({
   months: [],
   currentMonth: 'Diciembre',
   previousMonth: 'Noviembre',
+  loading: false,
+  error: null,
   addMonth: (monthName, rows) => set((state) => ({
     months: [...state.months.filter(m => m.monthName !== monthName), { monthName, rows }]
   })),
@@ -50,5 +56,7 @@ export const useReportStore = create<ReportStore>((set) => ({
   })),
   setCurrentMonth: (monthName) => set({ currentMonth: monthName }),
   setPreviousMonth: (monthName) => set({ previousMonth: monthName }),
-  clearAll: () => set({ months: [] }),
+  setLoading: (loading) => set({ loading }),
+  setError: (error) => set({ error }),
+  clearAll: () => set({ months: [], error: null }),
 }));

@@ -1,0 +1,10 @@
+# Cloudflare Pages Functions config
+# El usuario debe reemplazar el ID del KV namespace con el real creado en Cloudflare Dashboard
+
+name = "auto-helpdesk"
+compatibility_date = "2024-09-23"
+pages_build_output_dir = "dist"
+
+[[kv_namespaces]]
+binding = "KV_ZOHO"
+id = "REEMPLAZAR_CON_EL_ID_REAL_DEL_KV_NAMESPACE"
