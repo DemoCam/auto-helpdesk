@@ -156,13 +156,13 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
         return errorResponse(env, 400, "requestId y attachmentId requeridos.");
       }
 
-      // IMPORTANTE: NO enviar Accept de SDP v3 para descarga binaria
       let response = await fetch(
-        `${SDP_BASE_URL}/requests/${requestId}/attachments/${attachmentId}/_download`,
+        `${SDP_BASE_URL}/requests/${requestId}/attachments/${attachmentId}/download`,
         {
           method: "GET",
           headers: {
             Authorization: `Zoho-oauthtoken ${accessToken}`,
+            Accept: "application/vnd.manageengine.sdp.v3+json",
           },
         }
       );
@@ -170,11 +170,12 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
       if (response.status === 401) {
         accessToken = await forceRefreshToken(env);
         response = await fetch(
-          `${SDP_BASE_URL}/requests/${requestId}/attachments/${attachmentId}/_download`,
+          `${SDP_BASE_URL}/requests/${requestId}/attachments/${attachmentId}/download`,
           {
             method: "GET",
             headers: {
               Authorization: `Zoho-oauthtoken ${accessToken}`,
+              Accept: "application/vnd.manageengine.sdp.v3+json",
             },
           }
         );
