@@ -90,12 +90,12 @@ export function validateOrigin(request: Request, env: ZohoEnv): Response | null 
     return new Response(null, { headers: corsHeaders(env) });
   }
 
-  // En desarrollo local, permitir localhost
-  if (origin && (origin === allowedOrigin || origin.startsWith("http://localhost"))) {
+  // En desarrollo local o peticiones del mismo origen (donde origin es null)
+  if (!origin || origin === allowedOrigin || origin.startsWith("http://localhost")) {
     return null; // Origen válido
   }
 
-  return new Response(JSON.stringify({ error: "Unauthorized Origin" }), {
+  return new Response(JSON.stringify({ error: "Unauthorized Origin: " + origin }), {
     status: 403,
     headers: { "Content-Type": "application/json", ...corsHeaders(env) },
   });

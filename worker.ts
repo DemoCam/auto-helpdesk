@@ -17,6 +17,14 @@ export default {
 
     // Si no es /api/*, dejamos que Cloudflare Workers sirva los assets estáticos de React
     // (Esto requiere que [assets] esté configurado en wrangler.toml)
-    return env.ASSETS.fetch(request);
+    let response = await env.ASSETS.fetch(request);
+
+    // Si es un 404 (ej. la ruta /informes de React Router SPA), devolvemos el index.html
+    if (response.status === 404) {
+      const indexReq = new Request(new URL('/', request.url), request);
+      response = await env.ASSETS.fetch(indexReq);
+    }
+
+    return response;
   },
 };
