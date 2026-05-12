@@ -62,7 +62,7 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
           search_criteria: {
             field: "subject",
             condition: "contains",
-            value: `COMUNICADO ${query}`,
+            value: query,
           },
         },
       };

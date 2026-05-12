@@ -62,10 +62,11 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
     // --- CAPA 2: TOKEN KV + AUTO-SANACIÓN ---
     let accessToken = await getAccessToken(env);
 
-    // Construir rango de fechas para el filtro
-    const startDate = `${year}-${String(mes).padStart(2, "0")}-01T00:00:00.000Z`;
-    const lastDay = new Date(year, mes, 0).getDate();
-    const endDate = `${year}-${String(mes).padStart(2, "0")}-${lastDay}T23:59:59.999Z`;
+    // Construir rango de fechas para el filtro (Zoho requiere epoch timestamp en milisegundos)
+    const startObj = new Date(year, mes - 1, 1, 0, 0, 0);
+    const endObj = new Date(year, mes, 0, 23, 59, 59, 999);
+    const startDate = startObj.getTime().toString();
+    const endDate = endObj.getTime().toString();
 
     // Paginación automática
     let allRequests: SdpRequest[] = [];
