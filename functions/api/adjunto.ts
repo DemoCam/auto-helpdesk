@@ -61,8 +61,8 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
           fields_required: ["display_id", "subject", "created_time"],
           search_criteria: {
             field: "subject",
-            condition: "like",
-            value: `%COMUNICADO%${query}%`,
+            condition: "contains",
+            value: `COMUNICADO ${query}`,
           },
         },
       };

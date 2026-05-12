@@ -79,7 +79,6 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
           row_count: PAGE_SIZE,
           sort_field: "created_time",
           sort_order: "asc",
-          fields_required: REQUIRED_FIELDS,
           search_criteria: {
             field: "created_time",
             condition: "between",
