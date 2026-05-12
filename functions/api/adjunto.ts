@@ -181,7 +181,10 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
         );
       }
 
-      if (!response.ok) throw new Error(`SDP download error: ${response.status}`);
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`SDP download error: ${response.status} - ${errText}`);
+      }
 
       // Re-stream el binario al frontend
       const fileBytes = await response.arrayBuffer();
