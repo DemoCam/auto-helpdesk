@@ -519,9 +519,10 @@
    ═══════════════════════════════════════════ */
 .dashboard-grid {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 22px;
   margin-bottom: 36px;
+  align-items: start;
 }
 
 .chart-card {
@@ -530,9 +531,14 @@
   padding: 22px 24px;
   box-shadow: var(--shadow-sm);
   border: 1px solid var(--border-card);
-  transition: var(--transition);
+  transition: box-shadow 0.2s ease;
   overflow: hidden;
+  position: relative;
+  max-width: 100%;
+  min-width: 260px;
+  box-sizing: border-box;
 }
+
 
 .chart-card:hover {
   box-shadow: var(--shadow-md);
@@ -595,9 +601,10 @@
 
 .tables-row {
   display: grid;
-  grid-template-columns: repeat(2, 1fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 22px;
   margin-bottom: 22px;
+  align-items: start;
 }
 
 .table-card {
@@ -607,8 +614,13 @@
   box-shadow: var(--shadow-sm);
   border: 1px solid var(--border-card);
   overflow: hidden;
-  transition: var(--transition);
+  transition: box-shadow 0.2s ease;
+  position: relative;
+  max-width: 100%;
+  min-width: 260px;
+  box-sizing: border-box;
 }
+
 
 .table-card:hover {
   box-shadow: var(--shadow-md);
@@ -1739,4 +1751,76 @@ tbody tr:nth-child(even):hover {
   font-size: 0.82rem;
   color: var(--text-secondary);
   margin-top: 4px;
+}
+
+/* ═══════════════════════════════════════════
+   CARD RESIZE HANDLE
+   ═══════════════════════════════════════════ */
+.card-resize-handle {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 8px;
+  cursor: col-resize;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  transition: background 0.15s;
+}
+.card-resize-handle:hover {
+  background: rgba(0, 176, 80, 0.12);
+}
+.card-resize-handle:active {
+  background: rgba(0, 176, 80, 0.22);
+}
+.card-resize-handle-dots {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.chart-card:hover .card-resize-handle-dots,
+.table-card:hover .card-resize-handle-dots {
+  opacity: 1;
+}
+.card-resize-handle-dots span {
+  display: block;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: rgba(0, 176, 80, 0.6);
+}
+
+/* Gap slider control */
+.gap-control {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.gap-control label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.gap-control-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.gap-control-row input[type="range"] {
+  width: 90px;
+  accent-color: var(--green-primary);
+  cursor: pointer;
+}
+.gap-control-val {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  min-width: 30px;
+  font-variant-numeric: tabular-nums;
 }

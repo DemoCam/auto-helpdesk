@@ -4,6 +4,7 @@ import type { ReportRow } from '../store/useReportStore';
 import { fetchCasos } from '../utils/apiClient';
 import { mapZohoResponseToReportRows } from '../utils/zohoDataMapper';
 import ChartCard from '../components/ChartCard';
+import ResizableTableCard from '../components/ResizableTableCard';
 import LoadingOverlay from '../components/LoadingOverlay';
 import { toPng } from 'html-to-image';
 import JSZip from 'jszip';
@@ -33,6 +34,7 @@ const InformesMensuales: React.FC<Props> = ({ showNotification }) => {
   const [showYearlyChart, setShowYearlyChart] = useState(false);
   const [selectedMes, setSelectedMes] = useState(new Date().getMonth() + 1);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [gridGap, setGridGap] = useState(22);
 
   /* ─── API fetch ─── */
   const handleFetchData = useCallback(async () => {
@@ -310,6 +312,13 @@ const InformesMensuales: React.FC<Props> = ({ showNotification }) => {
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" /></svg>
               {exporting ? 'Exportando...' : 'Descargar ZIP'}
             </button>
+            <div className="gap-control">
+              <label>Espaciado</label>
+              <div className="gap-control-row">
+                <input type="range" min={4} max={48} step={2} value={gridGap} onChange={e => setGridGap(Number(e.target.value))} />
+                <span className="gap-control-val">{gridGap}px</span>
+              </div>
+            </div>
           </div>
         )}
         {loadedMonths.length > 0 && (
@@ -441,7 +450,7 @@ const InformesMensuales: React.FC<Props> = ({ showNotification }) => {
           )}
 
           {/* ═══ CHARTS GRID ═══ */}
-          <div className="dashboard-grid">
+          <div className="dashboard-grid" style={{ gap: gridGap }}>
             {/* 1. Casos Área de Sistemas */}
             <ChartCard id="chart_casos_sistemas" title="Casos Área de Sistemas" subtitle={`${currentMonth} — Total: ${totalCurrent}`}
               options={{ tooltip: { trigger: 'axis', backgroundColor: 'rgba(255,255,255,0.95)', borderColor: '#e0e0e0', textStyle: { color: '#333' } }, grid: { left: '3%', right: '4%', bottom: '12%', top: '10%', containLabel: true }, xAxis: { type: 'category', data: appStats.map(s => s[0]), axisLabel: { rotate: 40, fontSize: 10, color: '#555', interval: 0 }, axisLine: { lineStyle: { color: '#ddd' } }, axisTick: { show: false } }, yAxis: { type: 'value', axisLine: { show: false }, axisTick: { show: false }, splitLine: { lineStyle: { color: '#f0f0f0' } }, axisLabel: { color: '#888' } }, series: [{ name: 'Casos', data: appStats.map(s => s[1]), type: 'bar', barWidth: '55%', itemStyle: { color: { type: 'linear', x: 0, y: 0, x2: 0, y2: 1, colorStops: [{ offset: 0, color: '#00C95A' }, { offset: 1, color: '#00B050' }] }, borderRadius: [4, 4, 0, 0] }, label: { show: true, position: 'top', fontSize: 11, fontWeight: 'bold', color: '#00B050' } }] }} />
@@ -538,8 +547,8 @@ const InformesMensuales: React.FC<Props> = ({ showNotification }) => {
               ANÁLISIS COMPARATIVO
             </h2>
 
-            <div className="tables-row">
-              <div className="table-card" id="table_incidencias_resumen">
+            <div className="tables-row" style={{ gap: gridGap }}>
+              <ResizableTableCard id="table_incidencias_resumen">
                 <h3>Resumen de Incidencias</h3>
                 <table><thead><tr><th>Incidencias</th><th>{previousMonth}</th><th>{currentMonth}</th></tr></thead>
                 <tbody>
@@ -548,41 +557,41 @@ const InformesMensuales: React.FC<Props> = ({ showNotification }) => {
                   <tr><td>Solicitudes de Información</td><td>{prevMonthData.filter(r => r.Tipo === 'Solicitud de Información').length}</td><td>{totalSolInfo}</td></tr>
                   <tr><td>Incidentes</td><td>{prevMonthData.filter(r => r.Tipo === 'Incidente').length}</td><td>{totalInc}</td></tr>
                 </tbody></table>
-              </div>
-              <div className="table-card" id="table_estado_casos_tbl">
+              </ResizableTableCard>
+              <ResizableTableCard id="table_estado_casos_tbl">
                 <h3>Estado de los Casos</h3>
                 <table><thead><tr><th>Estado</th><th>Cantidad</th></tr></thead>
                 <tbody>{estadoStats.map(([estado, count]) => (<tr key={estado}><td><strong>{estado}</strong></td><td>{count}</td></tr>))}</tbody></table>
-              </div>
+              </ResizableTableCard>
             </div>
 
             {prevMonthData.length > 0 && (
-              <div className="tables-row">
-                <div className="table-card" id="table_incidentes_prev">
+              <div className="tables-row" style={{ gap: gridGap }}>
+                <ResizableTableCard id="table_incidentes_prev">
                   <h3>Incidentes — {previousMonth}</h3>
                   <table><thead><tr><th>Incidentes</th><th>{prevMonthData.filter(r => r.Tipo === 'Incidente').length}</th></tr></thead>
                   <tbody>{prevIncStats.map(([cat, count]) => (<tr key={cat}><td>{cat}</td><td>{count}</td></tr>))}</tbody></table>
-                </div>
-                <div className="table-card" id="table_incidentes_curr">
+                </ResizableTableCard>
+                <ResizableTableCard id="table_incidentes_curr">
                   <h3>Incidentes — {currentMonth}</h3>
                   <table><thead><tr><th>Incidentes</th><th>{totalInc}</th></tr></thead>
                   <tbody>{incStats.map(([cat, count]) => (<tr key={cat}><td>{cat}</td><td>{count}</td></tr>))}</tbody></table>
-                </div>
+                </ResizableTableCard>
               </div>
             )}
 
             {prevMonthData.length > 0 && (
-              <div className="table-card table-card--full" id="table_analisis_categorias">
+              <ResizableTableCard id="table_analisis_categorias" className="table-card--full">
                 <h3>Análisis por Categoría</h3>
                 <table><thead><tr><th>Casos</th><th>{previousMonth}</th><th>{currentMonth}</th><th>Diferencia</th></tr></thead>
                 <tbody>
                   <tr className="row-total"><td><strong>Total Casos</strong></td><td><strong>{totalPrev}</strong></td><td><strong>{totalCurrent}</strong></td><td className={totalCurrent - totalPrev >= 0 ? 'diff-pos' : 'diff-neg'}><strong>{totalCurrent - totalPrev >= 0 ? '+' : ''}{totalCurrent - totalPrev}</strong></td></tr>
                   {catComparison.map(row => (<tr key={row.cat}><td>•{row.cat}</td><td>{row.prev}</td><td>{row.curr}</td><td className={row.diff >= 0 ? 'diff-pos' : 'diff-neg'}>{row.diff >= 0 ? '+' : ''}{row.diff}</td></tr>))}
                 </tbody></table>
-              </div>
+              </ResizableTableCard>
             )}
 
-            <div className="table-card table-card--full" id="table_casos_tecnico">
+            <ResizableTableCard id="table_casos_tecnico" className="table-card--full">
               <h3>Casos por Técnico — Detalle SLA</h3>
               <table><thead><tr><th>Técnico</th>{prevMonthData.length > 0 && <th>{previousMonth}</th>}<th>{currentMonth}</th><th>Solución a Tiempo</th><th>1ª Rpta. a Tiempo</th><th>Sol. Vencidas</th><th>Rpta. Vencidas</th></tr></thead>
               <tbody>{tecStats.map(stat => (
@@ -596,7 +605,7 @@ const InformesMensuales: React.FC<Props> = ({ showNotification }) => {
                   <td className={stat.ateOverdue > 0 ? 'diff-neg' : ''}>{stat.ateOverdue}</td>
                 </tr>
               ))}</tbody></table>
-            </div>
+            </ResizableTableCard>
           </div>
         </>
       )}

@@ -1,15 +1,12 @@
 import React, { useRef, useState, useCallback } from 'react';
-import ReactECharts from 'echarts-for-react';
 
-interface ChartCardProps {
-  title: string;
-  options: any;
-  id: string;
-  height?: string;
-  subtitle?: string;
+interface Props {
+  id?: string;
+  className?: string;
+  children: React.ReactNode;
 }
 
-const ChartCard: React.FC<ChartCardProps> = ({ title, options, id, height = '420px', subtitle }) => {
+const ResizableTableCard: React.FC<Props> = ({ id, className = '', children }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState<number | null>(null);
   const dragging = useRef(false);
@@ -40,23 +37,12 @@ const ChartCard: React.FC<ChartCardProps> = ({ title, options, id, height = '420
 
   return (
     <div
-      className="chart-card"
-      id={id}
       ref={cardRef}
+      id={id}
+      className={`table-card ${className}`}
       style={width !== null ? { width } : undefined}
     >
-      <div className="chart-card-header">
-        <h3>{title}</h3>
-        {subtitle && <span className="chart-subtitle">{subtitle}</span>}
-      </div>
-      <div className="chart-container">
-        <ReactECharts
-          option={options}
-          style={{ height, width: '100%' }}
-          opts={{ renderer: 'canvas' }}
-          notMerge={true}
-        />
-      </div>
+      {children}
       <div className="card-resize-handle" onMouseDown={onMouseDown} title="Arrastra para ajustar el ancho">
         <div className="card-resize-handle-dots">
           <span /><span /><span /><span /><span />
@@ -66,4 +52,4 @@ const ChartCard: React.FC<ChartCardProps> = ({ title, options, id, height = '420
   );
 };
 
-export default ChartCard;
+export default ResizableTableCard;
