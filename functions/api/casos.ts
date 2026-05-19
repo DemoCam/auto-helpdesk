@@ -86,6 +86,7 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
             values: [startDate, endDate],
           },
         },
+        fields_required: REQUIRED_FIELDS,
       };
 
       let response = await fetchSdpRequests(accessToken, inputData);
