@@ -86,7 +86,6 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
             values: [startDate, endDate],
           },
         },
-        fields: REQUIRED_FIELDS,
       };
 
       let response = await fetchSdpRequests(accessToken, inputData);
@@ -101,7 +100,11 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
       if (!response.ok) {
         const errText = await response.text();
         console.error(`Error SDP API (${response.status}):`, errText);
-        throw new Error(`SDP API error: ${response.status} - ${errText}`);
+        // Incluir detalles del error en la respuesta para facilitar diagnóstico
+        return new Response(JSON.stringify({ error: `SDP API error: ${response.status}`, details: errText }), {
+          status: 502,
+          headers: { "Content-Type": "application/json", ...corsHeaders(env) },
+        });
       }
 
       const data = (await response.json()) as SdpListResponse;
