@@ -93,16 +93,12 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
 
       // --- CAPA 3: AUTO-SANACIÓN ---
       if (response.status === 401) {
-        console.log("Token expirado. Regenerando...");
         accessToken = await forceRefreshToken(env);
         response = await fetchSdpRequests(accessToken, inputData);
       }
 
       if (!response.ok) {
-        const errText = await response.text();
-        console.error(`Error SDP API (${response.status}):`, errText);
-        // Incluir detalles del error en la respuesta para facilitar diagnóstico
-        return new Response(JSON.stringify({ error: `SDP API error: ${response.status}`, details: errText }), {
+        return new Response(JSON.stringify({ error: "upstream_error" }), {
           status: 502,
           headers: { "Content-Type": "application/json", ...corsHeaders(env) },
         });
@@ -110,11 +106,6 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
 
       const data = (await response.json()) as SdpListResponse;
       const requests = data.requests || [];
-
-      // DEBUG: log primer request crudo para verificar estructura de respuesta
-      if (startIndex === 1 && requests.length > 0) {
-        console.log("DEBUG first request raw:", JSON.stringify(requests[0]));
-      }
 
       allRequests = allRequests.concat(requests);
 
@@ -126,16 +117,15 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
     }
 
     // --- CAPA 4: MUTACIÓN DE RESPUESTA ---
-    const rawSample = allRequests.length > 0 ? allRequests[0] : null;
-    const safeData = allRequests.map(mapToSafeDto);
+    const filtered = allRequests.filter(r => r.technician?.name !== "Yudi Andrea Muñoz Barrera");
+    const safeData = filtered.map(mapToSafeDto);
 
-    return new Response(JSON.stringify({ data: safeData, total: safeData.length, status: "success", _debug_raw: rawSample }), {
+    return new Response(JSON.stringify({ data: safeData, total: safeData.length, status: "success" }), {
       status: 200,
       headers: { "Content-Type": "application/json", ...corsHeaders(env) },
     });
 
-  } catch (error: any) {
-    console.error("Internal Server Error:", error.message);
+  } catch {
     return errorResponse(env, 500, "Internal Server Error");
   }
 }
