@@ -152,16 +152,6 @@ async function fetchSdpRequests(accessToken: string, inputData: object): Promise
  * NUNCA devuelve IDs internos, URLs de infraestructura, ni tokens.
  */
 function mapToSafeDto(req: SdpRequest) {
-  // Determinar tipo: primero por request_type si existe, luego por is_service_request
-  let tipo = "No asignado";
-  if (req.request_type?.name) {
-    tipo = req.request_type.name;
-  } else if (req.is_service_request === true) {
-    tipo = "Solicitud de Servicio";
-  } else if (req.is_service_request === false) {
-    tipo = "Incidente";
-  }
-
   return {
     codigo: req.display_id || String(req.id || ""),
     fecha: req.created_time?.display_value || "",
@@ -169,7 +159,7 @@ function mapToSafeDto(req: SdpRequest) {
     estado: req.status?.name || "No asignado",
     tecnico: req.technician?.name || "No asignado",
     cliente: req.requester?.name || "No asignado",
-    tipo,
+    tipo: req.request_type?.name || "No asignado",
     categoria: req.category?.name || "No asignado",
     subcategoria: req.subcategory?.name || "No asignado",
     articulo: req.item?.name || "No asignado",

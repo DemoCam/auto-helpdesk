@@ -40,10 +40,7 @@ export function mapZohoResponseToReportRows(apiData: ZohoCasoDTO[]): ReportRow[]
       Articulo: dto.articulo || "No asignado",
     }))
     .filter((row) => {
-      // Mismos filtros que el CSVParser original
       if (!row.Codigo && !row.Titulo) return false;
-      if (row.Tipo.toLowerCase() === "no asignado") return false;
-      if (row.Estado.toLowerCase() === "canceled") return false;
       return true;
     });
 }
