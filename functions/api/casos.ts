@@ -86,7 +86,6 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
             values: [startDate, endDate],
           },
         },
-        fields_required: REQUIRED_FIELDS,
       };
 
       let response = await fetchSdpRequests(accessToken, inputData);
@@ -146,6 +145,7 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
 async function fetchSdpRequests(accessToken: string, inputData: object): Promise<Response> {
   const params = new URLSearchParams({
     input_data: JSON.stringify(inputData),
+    fields: REQUIRED_FIELDS.join(","),
   });
 
   return fetch(`${SDP_BASE_URL}/requests?${params.toString()}`, {
