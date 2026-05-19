@@ -125,9 +125,10 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
     }
 
     // --- CAPA 4: MUTACIÓN DE RESPUESTA ---
+    const rawSample = allRequests.length > 0 ? allRequests[0] : null;
     const safeData = allRequests.map(mapToSafeDto);
 
-    return new Response(JSON.stringify({ data: safeData, total: safeData.length, status: "success" }), {
+    return new Response(JSON.stringify({ data: safeData, total: safeData.length, status: "success", _debug_raw: rawSample }), {
       status: 200,
       headers: { "Content-Type": "application/json", ...corsHeaders(env) },
     });
