@@ -126,7 +126,7 @@ const InformesMensuales: React.FC<Props> = ({ showNotification }) => {
 
   /* ─── 6. Métricas por Técnico — FIXED LOGIC ─── */
   const getTecStats = (data: ReportRow[]) => {
-    const tecs = Array.from(new Set(data.map(r => r.Tecnico).filter(Boolean)));
+    const tecs = Array.from(new Set(data.map(r => r.Tecnico).filter(t => t && t !== 'No asignado')));
     return tecs.map(tec => {
       const tecRows = data.filter(r => r.Tecnico === tec);
       const total = tecRows.length;
