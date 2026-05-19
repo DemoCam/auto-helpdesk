@@ -86,6 +86,7 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
             values: [startDate, endDate],
           },
         },
+        fields: REQUIRED_FIELDS,
       };
 
       let response = await fetchSdpRequests(accessToken, inputData);
@@ -105,6 +106,12 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
 
       const data = (await response.json()) as SdpListResponse;
       const requests = data.requests || [];
+
+      // DEBUG: log primer request crudo para verificar estructura de respuesta
+      if (startIndex === 1 && requests.length > 0) {
+        console.log("DEBUG first request raw:", JSON.stringify(requests[0]));
+      }
+
       allRequests = allRequests.concat(requests);
 
       hasMore = data.list_info?.has_more_rows === true && requests.length === PAGE_SIZE;
