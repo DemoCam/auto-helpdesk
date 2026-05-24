@@ -11,6 +11,13 @@ export interface ZohoEnv {
   ZOHO_REFRESH_TOKEN: string;
   KV_ZOHO: KVNamespace;
   ALLOWED_ORIGIN?: string;
+  // Cloudflare Access (Zero Trust). Si ambos están seteados, se exige JWT válido.
+  ACCESS_TEAM_DOMAIN?: string; // ej: "miequipo.cloudflareaccess.com"
+  ACCESS_AUD?: string; // AUD tag de la aplicación de Access
+  // Lista de técnicos a excluir de los informes (separados por coma).
+  EXCLUDED_TECHNICIANS?: string;
+  // "true" para permitir orígenes localhost (solo desarrollo).
+  DEV_MODE?: string;
 }
 
 /**
@@ -18,7 +25,8 @@ export interface ZohoEnv {
  */
 export async function getAccessToken(env: ZohoEnv): Promise<string> {
   if (!env.KV_ZOHO) {
-    throw new Error("FATAL: KV_ZOHO is undefined! The KV namespace binding is missing or not configured correctly in Cloudflare Dashboard.");
+    console.error("KV_ZOHO binding ausente o mal configurado en Cloudflare.");
+    throw new Error("Configuración del servidor incompleta.");
   }
   let token = await env.KV_ZOHO.get("ACCESS_TOKEN");
   if (token) return token;
@@ -53,9 +61,9 @@ async function refreshAccessToken(env: ZohoEnv): Promise<string | null> {
   if (!env.ZOHO_REFRESH_TOKEN) faltan.push("ZOHO_REFRESH_TOKEN");
   
   if (faltan.length > 0) {
-    const envKeys = Object.keys(env).join(", ");
-    const hasOrigin = !!env.ALLOWED_ORIGIN;
-    throw new Error(`FATAL: Faltan credenciales de Zoho en las variables de entorno. Faltan: ${faltan.join(", ")}. Keys en env: [${envKeys}]. Tiene ALLOWED_ORIGIN? ${hasOrigin}. Por favor, asegúrate de haber hecho un 'Retry Deployment' en Cloudflare DESPUÉS de guardar las variables.`);
+    // No exponer nombres de variables ni estado del entorno en el mensaje (se propaga en logs).
+    console.error(`Faltan credenciales de Zoho en el entorno: ${faltan.join(", ")}`);
+    throw new Error("Configuración del servidor incompleta.");
   }
   const body = new URLSearchParams({
     grant_type: "refresh_token",
@@ -90,6 +98,12 @@ export function corsHeaders(env: ZohoEnv): Record<string, string> {
     "Access-Control-Allow-Headers": "Content-Type",
     "Access-Control-Max-Age": "86400",
     "Cache-Control": "no-store, max-age=0",
+    "Vary": "Origin",
+    // Cabeceras de seguridad para las respuestas JSON del Worker (public/_headers
+    // solo cubre assets estáticos).
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
   };
 }
 
@@ -105,9 +119,15 @@ export function validateOrigin(request: Request, env: ZohoEnv): Response | null 
     return new Response(null, { headers: corsHeaders(env) });
   }
 
-  // En desarrollo local o peticiones del mismo origen (donde origin es null)
-  if (!origin || origin === allowedOrigin || origin.startsWith("http://localhost")) {
+  // Peticiones del mismo origen no envían el header Origin en GET → se permiten.
+  // El control de acceso real lo aplica Cloudflare Access (verifyAccessJwt), no CORS.
+  if (!origin || origin === allowedOrigin) {
     return null; // Origen válido
+  }
+
+  // localhost solo en modo desarrollo explícito (evita aceptar http://localhost.evil.com en prod).
+  if (env.DEV_MODE === "true" && /^http:\/\/localhost(:\d+)?$/.test(origin)) {
+    return null;
   }
 
   return new Response(JSON.stringify({ error: "Unauthorized Origin: " + origin }), {

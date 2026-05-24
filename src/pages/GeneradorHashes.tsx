@@ -110,6 +110,11 @@ const GeneradorHashes: React.FC<Props> = ({ showNotification }) => {
       showNotification('Solo se aceptan archivos .xlsx', 'error');
       return;
     }
+    const MAX_BYTES = 25 * 1024 * 1024; // 25 MB
+    if (file.size > MAX_BYTES) {
+      showNotification('El archivo supera el límite de 25 MB', 'error');
+      return;
+    }
     store.setProcessStatus('loading');
     const reader = new FileReader();
     reader.onload = (ev) => {

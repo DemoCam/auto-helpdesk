@@ -3,7 +3,11 @@
 // Soporta: listar adjuntos y descargar archivo binario
 
 import { getAccessToken, forceRefreshToken, validateOrigin, corsHeaders, errorResponse } from "./_shared/zoho-auth";
+import { applyApiGuards, isNumericId, sanitizeQuery } from "./_shared/security";
 import type { ZohoEnv } from "./_shared/zoho-auth";
+
+// Tamaño máximo de adjunto a re-transmitir (evita presión de memoria / abuso).
+const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024; // 25 MB
 
 const SDP_BASE_URL = "https://sdpondemand.manageengine.com/api/v3";
 const COMUNICADO_REGEX = /COMUNICADO[-_ ]*(\d+)/i;
@@ -40,6 +44,10 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
     return errorResponse(env, 405, "Method Not Allowed");
   }
 
+  // --- Rate limiting + Cloudflare Access JWT ---
+  const guardError = await applyApiGuards(request, env);
+  if (guardError) return guardError;
+
   try {
     const url = new URL(request.url);
     const action = url.searchParams.get("action") || "search";
@@ -47,8 +55,8 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
 
     // ═══ ACTION: Buscar comunicados ═══
     if (action === "search") {
-      const query = url.searchParams.get("q") || "";
-      if (!query.trim()) {
+      const query = sanitizeQuery(url.searchParams.get("q") || "");
+      if (!query) {
         return errorResponse(env, 400, "Parámetro 'q' requerido para buscar comunicados.");
       }
 
@@ -169,7 +177,7 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
     // ═══ ACTION: Verificar si un request tiene tareas ═══
     if (action === "tasks") {
       const requestId = url.searchParams.get("requestId");
-      if (!requestId) return errorResponse(env, 400, "requestId requerido.");
+      if (!isNumericId(requestId)) return errorResponse(env, 400, "requestId inválido.");
 
       const inputData = {
         list_info: { row_count: 1, start_index: 1 },
@@ -216,7 +224,7 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
     // ═══ ACTION: Listar adjuntos de un request ═══
     if (action === "list") {
       const requestId = url.searchParams.get("requestId");
-      if (!requestId) return errorResponse(env, 400, "requestId requerido.");
+      if (!isNumericId(requestId)) return errorResponse(env, 400, "requestId inválido.");
 
       let response = await fetch(`${SDP_BASE_URL}/requests/${requestId}/attachments`, {
         method: "GET",
@@ -258,8 +266,8 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
     if (action === "download") {
       const requestId = url.searchParams.get("requestId");
       const attachmentId = url.searchParams.get("attachmentId");
-      if (!requestId || !attachmentId) {
-        return errorResponse(env, 400, "requestId y attachmentId requeridos.");
+      if (!isNumericId(requestId) || !isNumericId(attachmentId)) {
+        return errorResponse(env, 400, "requestId y attachmentId inválidos.");
       }
 
       // 1. OBTENER METADATOS DEL ADJUNTO PARA EXTRAER EL CONTENT_URL REAL
@@ -314,14 +322,26 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
         throw new Error(`SDP download error: ${downloadResponse.status} - ${errText}`);
       }
 
+      // Límite de tamaño (rechaza temprano si Content-Length lo declara).
+      const declaredSize = parseInt(downloadResponse.headers.get("Content-Length") || "0", 10);
+      if (declaredSize > MAX_ATTACHMENT_BYTES) {
+        return errorResponse(env, 413, "Adjunto demasiado grande.");
+      }
+
       // Re-stream el binario al frontend
       const fileBytes = await downloadResponse.arrayBuffer();
+      if (fileBytes.byteLength > MAX_ATTACHMENT_BYTES) {
+        return errorResponse(env, 413, "Adjunto demasiado grande.");
+      }
+
+      // Sanitizar el filename para evitar inyección de cabeceras (CRLF / comillas).
+      const safeName = originalName.replace(/[\r\n"\\]/g, "_").slice(0, 200);
 
       return new Response(fileBytes, {
         status: 200,
         headers: {
           "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          "Content-Disposition": `attachment; filename="${originalName}"`,
+          "Content-Disposition": `attachment; filename="${safeName}"`,
           ...corsHeaders(env),
         },
       });

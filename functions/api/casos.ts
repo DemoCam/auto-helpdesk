@@ -3,6 +3,7 @@
 // 4 capas de seguridad: CORS, Sanitización, Token KV, Mutación de respuesta
 
 import { getAccessToken, forceRefreshToken, validateOrigin, corsHeaders, errorResponse } from "./_shared/zoho-auth";
+import { applyApiGuards } from "./_shared/security";
 import type { ZohoEnv } from "./_shared/zoho-auth";
 
 const SDP_BASE_URL = "https://sdpondemand.manageengine.com/api/v3";
@@ -49,6 +50,10 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
   if (request.method !== "GET") {
     return errorResponse(env, 405, "Method Not Allowed");
   }
+
+  // --- CAPA 1.5: Rate limiting + Cloudflare Access JWT ---
+  const guardError = await applyApiGuards(request, env);
+  if (guardError) return guardError;
 
   try {
     const url = new URL(request.url);
@@ -117,7 +122,13 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
     }
 
     // --- CAPA 4: MUTACIÓN DE RESPUESTA ---
-    const filtered = allRequests.filter(r => r.technician?.name !== "Yudi Andrea Muñoz Barrera");
+    const excluded = (env.EXCLUDED_TECHNICIANS || "")
+      .split(",")
+      .map(n => n.trim().toLowerCase())
+      .filter(Boolean);
+    const filtered = allRequests.filter(
+      r => !excluded.includes((r.technician?.name || "").trim().toLowerCase())
+    );
     const safeData = filtered.map(mapToSafeDto);
 
     return new Response(JSON.stringify({ data: safeData, total: safeData.length, status: "success" }), {
