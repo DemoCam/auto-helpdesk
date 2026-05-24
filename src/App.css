@@ -1732,6 +1732,40 @@ tbody tr:nth-child(even):hover {
   flex-wrap: wrap;
 }
 
+.hash-tasks-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px 9px;
+  border-radius: 10px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+  min-width: 70px;
+  letter-spacing: 0.2px;
+}
+
+.hash-tasks-badge--loading {
+  background: var(--bg-main);
+  border: 1px solid var(--border-light);
+  color: var(--text-muted);
+  min-width: 24px;
+  padding: 3px 6px;
+}
+
+.hash-tasks-badge--yes {
+  background: var(--green-light);
+  color: var(--green-dark);
+  border: 1px solid rgba(0, 176, 80, 0.25);
+}
+
+.hash-tasks-badge--no {
+  background: #F3F4F6;
+  color: #9CA3AF;
+  border: 1px solid #E5E7EB;
+}
+
 .hash-error-box {
   display: flex;
   align-items: center;

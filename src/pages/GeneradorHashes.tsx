@@ -2,7 +2,7 @@ import React, { useCallback, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 import { useHashStore } from '../store/useHashStore';
-import { searchComunicados, listAttachments, downloadAttachment, fetchActiveComunicados } from '../utils/apiClient';
+import { searchComunicados, listAttachments, downloadAttachment, fetchActiveComunicados, checkRequestHasTasks } from '../utils/apiClient';
 import {
   readHashSheet, readIpSheet, generateAllCsvs, generateRulesJson,
   type HashProcessResult, type IpProcessResult
@@ -18,6 +18,27 @@ const GeneradorHashes: React.FC<Props> = ({ showNotification }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<'search' | 'upload'>('search');
   const [selectedRequest, setSelectedRequest] = useState<{ id: number; displayId: string; subject: string } | null>(null);
+  const [taskMap, setTaskMap] = useState<Record<number, 'loading' | 'yes' | 'no'>>({});
+
+  // Consulta paralela de tareas cuando cambian los resultados de búsqueda
+  React.useEffect(() => {
+    if (store.searchResults.length === 0) {
+      setTaskMap({});
+      return;
+    }
+    const initial: Record<number, 'loading' | 'yes' | 'no'> = {};
+    store.searchResults.forEach(r => { initial[r.id] = 'loading'; });
+    setTaskMap(initial);
+
+    store.searchResults.forEach(async (r) => {
+      try {
+        const hasTasks = await checkRequestHasTasks(String(r.id));
+        setTaskMap(prev => ({ ...prev, [r.id]: hasTasks ? 'yes' : 'no' }));
+      } catch {
+        setTaskMap(prev => ({ ...prev, [r.id]: 'no' }));
+      }
+    });
+  }, [store.searchResults]);
 
   // ═══ Load Active comunicados ═══
   const handleLoadActive = useCallback(async () => {
@@ -245,6 +266,17 @@ const GeneradorHashes: React.FC<Props> = ({ showNotification }) => {
                   <div key={r.id} className={`hash-result-item ${selectedRequest?.id === r.id ? 'hash-result-item--selected' : ''}`} onClick={() => setSelectedRequest(r)}>
                     <span className="hash-result-id">#{r.displayId}</span>
                     <span className="hash-result-subject">{r.subject}</span>
+                    {taskMap[r.id] === 'loading' && (
+                      <span className="hash-tasks-badge hash-tasks-badge--loading">
+                        <svg className="spinner" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><circle cx="12" cy="12" r="10" strokeOpacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round"/></svg>
+                      </span>
+                    )}
+                    {taskMap[r.id] === 'yes' && (
+                      <span className="hash-tasks-badge hash-tasks-badge--yes">Tareas: Sí</span>
+                    )}
+                    {taskMap[r.id] === 'no' && (
+                      <span className="hash-tasks-badge hash-tasks-badge--no">Tareas: No</span>
+                    )}
                     {selectedRequest?.id === r.id && (
                       <button className="btn-fetch btn-fetch--sm" onClick={(e) => { e.stopPropagation(); handleDownloadFromZoho(r.id, r.subject || ''); }}>
                         Descargar y Procesar

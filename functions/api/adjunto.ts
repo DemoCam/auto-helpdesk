@@ -166,6 +166,53 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
         headers: { "Content-Type": "application/json", ...corsHeaders(env) },
       });
     }
+    // ═══ ACTION: Verificar si un request tiene tareas ═══
+    if (action === "tasks") {
+      const requestId = url.searchParams.get("requestId");
+      if (!requestId) return errorResponse(env, 400, "requestId requerido.");
+
+      const inputData = {
+        list_info: { row_count: 1, start_index: 1 },
+      };
+      const params = new URLSearchParams({ input_data: JSON.stringify(inputData) });
+
+      let response = await fetch(`${SDP_BASE_URL}/requests/${requestId}/tasks?${params.toString()}`, {
+        method: "GET",
+        headers: {
+          Authorization: `Zoho-oauthtoken ${accessToken}`,
+          Accept: "application/vnd.manageengine.sdp.v3+json",
+        },
+      });
+
+      if (response.status === 401) {
+        accessToken = await forceRefreshToken(env);
+        response = await fetch(`${SDP_BASE_URL}/requests/${requestId}/tasks?${params.toString()}`, {
+          method: "GET",
+          headers: {
+            Authorization: `Zoho-oauthtoken ${accessToken}`,
+            Accept: "application/vnd.manageengine.sdp.v3+json",
+          },
+        });
+      }
+
+      if (response.status === 404) {
+        return new Response(JSON.stringify({ data: { hasTasks: false }, status: "success" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders(env) },
+        });
+      }
+
+      if (!response.ok) throw new Error(`SDP tasks error: ${response.status}`);
+
+      const data = (await response.json()) as any;
+      const hasTasks = Array.isArray(data.tasks) && data.tasks.length > 0;
+
+      return new Response(JSON.stringify({ data: { hasTasks }, status: "success" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json", ...corsHeaders(env) },
+      });
+    }
+
     // ═══ ACTION: Listar adjuntos de un request ═══
     if (action === "list") {
       const requestId = url.searchParams.get("requestId");

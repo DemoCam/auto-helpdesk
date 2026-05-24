@@ -111,4 +111,15 @@ export async function downloadAttachment(
   return { buffer, filename };
 }
 
+/**
+ * Verifica si un request tiene al menos una tarea asociada.
+ */
+export async function checkRequestHasTasks(requestId: string): Promise<boolean> {
+  const resp = await fetchFromProxy<ApiResponse<{ hasTasks: boolean }>>("/api/adjunto", {
+    action: "tasks",
+    requestId,
+  });
+  return resp.data.hasTasks;
+}
+
 export { ApiError };
