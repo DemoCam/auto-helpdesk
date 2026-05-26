@@ -29,8 +29,9 @@ function isSafeContentUrl(url: string | undefined | null): url is string {
   if (!url || typeof url !== "string") return false;
   // Debe ser ruta relativa: empieza con "/" pero NO con "//" (protocol-relative).
   if (!url.startsWith("/") || url.startsWith("//")) return false;
-  // No debe contener esquema, @ (user:pass@host) ni caracteres de control.
-  if (/[://]/.test(url.slice(1))) return false;
+  // No debe contener esquema absoluto (://), @ (user:pass@host) ni caracteres de control.
+  // Nota: [://] era incorrecto — coincidía con "/" individual rechazando rutas válidas.
+  if (url.includes("://")) return false;
   if (url.includes("@")) return false;
   if (/[\r\n\t ]/.test(url)) return false;
   return true;
