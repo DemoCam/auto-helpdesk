@@ -8,8 +8,6 @@ import {
   HEADER_ROW_NUMBER,
   normalizeText,
   normalizeHeader,
-  defangToNormal,
-  isValidIpv4,
   extractIpsFromValue,
 } from "../../functions/api/_shared/ipDetect";
 
