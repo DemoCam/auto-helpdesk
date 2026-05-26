@@ -128,6 +128,7 @@ const GeneradorHashes: React.FC<Props> = ({ showNotification }) => {
   // ═══ Core processing ═══
   const processExcelBuffer = useCallback((buffer: ArrayBuffer, filename: string, subject?: string) => {
     try {
+      store.resetResults();
       const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' });
       const allWarnings: string[] = [];
       let hashResult: HashProcessResult | null = null;
