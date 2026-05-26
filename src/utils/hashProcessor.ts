@@ -14,6 +14,7 @@ const HEADER_ROW_NUMBER = 4; // Fila 4 (1-indexed)
 const SOURCE_VALUE = "user";
 const COMUNICADO_REGEX = /COMUNICADO[-_ ]*(\d+)/i;
 const IPV4_REGEX = /(?<![.\d])(?:\d{1,3}\.){3}\d{1,3}(?![.\d])/g;
+const MAX_IPS_PER_RULE = 49;
 
 // ═══════════════════════════════════════════
 // TIPOS
@@ -398,9 +399,32 @@ export function buildSentinelOneRule(
 }
 
 /**
- * Genera el JSON de reglas de bloqueo.
+ * Genera los JSON de reglas de bloqueo, dividiendo en chunks de MAX_IPS_PER_RULE.
+ * Retorna un mapa { nombreArchivo: contenidoJson }.
  */
-export function generateRulesJson(ipResult: IpProcessResult, status: "Disabled" | "Enabled" = "Disabled"): string {
-  const rule = buildSentinelOneRule(ipResult.ruleName, ipResult.uniqueIps, status);
-  return JSON.stringify([rule], null, 2) + "\n";
+export function generateRulesJson(
+  ipResult: IpProcessResult,
+  status: "Disabled" | "Enabled" = "Disabled"
+): Record<string, string> {
+  const { uniqueIps, ruleName, comunicadoNumber } = ipResult;
+
+  const chunks: string[][] = [];
+  for (let i = 0; i < uniqueIps.length; i += MAX_IPS_PER_RULE) {
+    chunks.push(uniqueIps.slice(i, i + MAX_IPS_PER_RULE));
+  }
+
+  const files: Record<string, string> = {};
+
+  if (chunks.length === 1) {
+    const rule = buildSentinelOneRule(ruleName, chunks[0], status);
+    files[`regla_bloqueo_${comunicadoNumber}.json`] = JSON.stringify([rule], null, 2) + "\n";
+  } else {
+    chunks.forEach((chunk, idx) => {
+      const parteName = `${ruleName} (${idx + 1} de ${chunks.length})`;
+      const rule = buildSentinelOneRule(parteName, chunk, status);
+      files[`regla_bloqueo_${comunicadoNumber}_parte_${idx + 1}.json`] = JSON.stringify([rule], null, 2) + "\n";
+    });
+  }
+
+  return files;
 }

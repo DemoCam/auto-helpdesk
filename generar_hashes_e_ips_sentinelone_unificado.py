@@ -76,6 +76,7 @@ HASH_SHEET_NAME = "HASH"
 IP_SHEET_NAME = "IP"
 HEADER_ROW_NUMBER = 4
 SOURCE_VALUE = "user"
+MAX_IPS_POR_REGLA = 49
 COMUNICADO_REGEX = re.compile(r"COMUNICADO[-_ ]*(\d+)", re.IGNORECASE)
 IPV4_REGEX = re.compile(r"(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])")
 
@@ -448,28 +449,45 @@ def construir_regla_sentinelone(nombre_regla: str, ips: list[str], status: str) 
 
 def guardar_json_bloqueo_ip(
     ruta_excel: Path, enabled: bool = False, carpeta_salida: Path | None = None
-) -> Path:
+) -> list[Path]:
     ips, nombre_regla, numero_comunicado, filas_sin_ip_valida = leer_ips_comunicado(ruta_excel)
 
     status = "Enabled" if enabled else "Disabled"
-    regla = construir_regla_sentinelone(nombre_regla=nombre_regla, ips=ips, status=status)
+
+    chunks = [ips[i:i + MAX_IPS_POR_REGLA] for i in range(0, len(ips), MAX_IPS_POR_REGLA)]
 
     if carpeta_salida is None:
         carpeta_salida = construir_carpeta_salida_unica(ruta_excel)
     carpeta_salida.mkdir(parents=True, exist_ok=True)
 
-    ruta_salida = carpeta_salida / f"rules_{nombre_regla}.json"
-    with ruta_salida.open("w", encoding="utf-8") as archivo_json:
-        json.dump([regla], archivo_json, indent=2, ensure_ascii=False)
-        archivo_json.write("\n")
+    archivos_generados: list[Path] = []
+
+    if len(chunks) == 1:
+        regla = construir_regla_sentinelone(nombre_regla=nombre_regla, ips=chunks[0], status=status)
+        ruta_salida = carpeta_salida / f"rules_{nombre_regla}.json"
+        with ruta_salida.open("w", encoding="utf-8") as archivo_json:
+            json.dump([regla], archivo_json, indent=2, ensure_ascii=False)
+            archivo_json.write("\n")
+        archivos_generados.append(ruta_salida)
+    else:
+        for idx, chunk in enumerate(chunks, start=1):
+            nombre_parte = f"{nombre_regla} ({idx} de {len(chunks)})"
+            regla = construir_regla_sentinelone(nombre_regla=nombre_parte, ips=chunk, status=status)
+            ruta_salida = carpeta_salida / f"rules_{nombre_regla}_parte_{idx}.json"
+            with ruta_salida.open("w", encoding="utf-8") as archivo_json:
+                json.dump([regla], archivo_json, indent=2, ensure_ascii=False)
+                archivo_json.write("\n")
+            archivos_generados.append(ruta_salida)
 
     print(f"\n[IPS] Procesado: {ruta_excel.name}")
-    print(f"  Regla generada: {nombre_regla}")
+    print(f"  Regla base: {nombre_regla}")
     print(f"  Número de comunicado: {numero_comunicado}")
     print(f"  Estado de la regla: {status}")
-    print(f"  IPs únicas exportadas: {len(ips)}")
+    print(f"  IPs únicas totales: {len(ips)}")
+    print(f"  Archivos JSON generados: {len(archivos_generados)}")
     print(f"  Carpeta de salida: {carpeta_salida}")
-    print(f"  Archivo generado: {ruta_salida.name}")
+    for archivo in archivos_generados:
+        print(f"    - {archivo.name}")
 
     if filas_sin_ip_valida:
         print("\n  Advertencia: se detectaron valores no vacíos sin IP válida:")
@@ -478,7 +496,7 @@ def guardar_json_bloqueo_ip(
         if len(filas_sin_ip_valida) > 20:
             print(f"    ... y {len(filas_sin_ip_valida) - 20} más.")
 
-    return ruta_salida
+    return archivos_generados
 
 
 # =========================

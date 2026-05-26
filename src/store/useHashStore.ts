@@ -26,7 +26,7 @@ interface HashStore {
   hashRows: HashRow[];
   ipResult: IpProcessResult | null;
   csvFiles: Record<string, string>;
-  rulesJson: string;
+  rulesJsonFiles: Record<string, string>;
   processStatus: ProcessStatus;
   errorMessage: string;
   warnings: string[];
@@ -42,7 +42,7 @@ interface HashStore {
   setSearchStatus: (status: ProcessStatus) => void;
   setFile: (filename: string, buffer: ArrayBuffer | null) => void;
   setHashResults: (rows: HashRow[], csvFiles: Record<string, string>) => void;
-  setIpResult: (result: IpProcessResult | null, rulesJson: string) => void;
+  setIpResult: (result: IpProcessResult | null, rulesJsonFiles: Record<string, string>) => void;
   setProcessStatus: (status: ProcessStatus) => void;
   setErrorMessage: (msg: string) => void;
   setWarnings: (warnings: string[]) => void;
@@ -62,7 +62,7 @@ export const useHashStore = create<HashStore>((set) => ({
   hashRows: [],
   ipResult: null,
   csvFiles: {},
-  rulesJson: "",
+  rulesJsonFiles: {},
   processStatus: "idle",
   errorMessage: "",
   warnings: [],
@@ -75,7 +75,7 @@ export const useHashStore = create<HashStore>((set) => ({
   setSearchStatus: (status) => set({ searchStatus: status }),
   setFile: (filename, buffer) => set({ filename, fileBuffer: buffer }),
   setHashResults: (rows, csvFiles) => set({ hashRows: rows, csvFiles }),
-  setIpResult: (result, rulesJson) => set({ ipResult: result, rulesJson }),
+  setIpResult: (result, rulesJsonFiles) => set({ ipResult: result, rulesJsonFiles }),
   setProcessStatus: (status) => set({ processStatus: status }),
   setErrorMessage: (msg) => set({ errorMessage: msg }),
   setWarnings: (warnings) => set({ warnings }),
@@ -87,7 +87,7 @@ export const useHashStore = create<HashStore>((set) => ({
       hashRows: [],
       ipResult: null,
       csvFiles: {},
-      rulesJson: "",
+      rulesJsonFiles: {},
       processStatus: "idle",
       errorMessage: "",
       warnings: [],
@@ -102,7 +102,7 @@ export const useHashStore = create<HashStore>((set) => ({
       hashRows: [],
       ipResult: null,
       csvFiles: {},
-      rulesJson: "",
+      rulesJsonFiles: {},
       processStatus: "idle",
       errorMessage: "",
       warnings: [],

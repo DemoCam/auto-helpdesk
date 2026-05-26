@@ -150,8 +150,8 @@ const GeneradorHashes: React.FC<Props> = ({ showNotification }) => {
         try {
           ipResult = readIpSheet(workbook, filename, subject);
           if (ipResult.warnings.length > 0) allWarnings.push(...ipResult.warnings);
-          const rulesJson = generateRulesJson(ipResult, store.ruleStatus);
-          store.setIpResult(ipResult, rulesJson);
+          const rulesJsonFiles = generateRulesJson(ipResult, store.ruleStatus);
+          store.setIpResult(ipResult, rulesJsonFiles);
         } catch (err: any) {
           allWarnings.push(`IPs: ${err.message}`);
         }
@@ -200,10 +200,7 @@ const GeneradorHashes: React.FC<Props> = ({ showNotification }) => {
   const downloadAllRules = async () => {
     const zip = new JSZip();
     Object.entries(store.csvFiles).forEach(([name, content]) => zip.file(name, content));
-    if (store.rulesJson) {
-      const num = store.ipResult?.comunicadoNumber || 'regla';
-      zip.file(`regla_bloqueo_${num}.json`, store.rulesJson);
-    }
+    Object.entries(store.rulesJsonFiles).forEach(([name, content]) => zip.file(name, content));
     const blob = await zip.generateAsync({ type: 'blob' });
     const link = document.createElement('a');
     link.href = URL.createObjectURL(blob);
@@ -365,7 +362,9 @@ const GeneradorHashes: React.FC<Props> = ({ showNotification }) => {
               <div className="hash-stat-card">
                 <span className="hash-stat-value">{store.ipResult.uniqueIps.length}</span>
                 <span className="hash-stat-label">IPs únicas</span>
-                <span className="hash-stat-sub">Regla: {store.ruleStatus}</span>
+                <span className="hash-stat-sub">
+                  {Object.keys(store.rulesJsonFiles).length} JSON · Regla: {store.ruleStatus}
+                </span>
               </div>
             )}
           </div>
@@ -406,12 +405,12 @@ const GeneradorHashes: React.FC<Props> = ({ showNotification }) => {
                   {name}
                 </button>
               ))}
-              {store.rulesJson && (
-                <button className="hash-download-btn hash-download-btn--json" onClick={() => downloadFile(store.rulesJson, `regla_bloqueo_${store.ipResult?.comunicadoNumber || 'regla'}.json`, 'application/json')}>
+              {Object.entries(store.rulesJsonFiles).map(([name, content]) => (
+                <button key={name} className="hash-download-btn hash-download-btn--json" onClick={() => downloadFile(content, name, 'application/json')}>
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-                  regla_bloqueo_{store.ipResult?.comunicadoNumber || 'regla'}.json
+                  {name}
                 </button>
-              )}
+              ))}
             </div>
             <div className="hash-download-actions">
               <button className="btn-fetch" onClick={downloadAllRules}>
