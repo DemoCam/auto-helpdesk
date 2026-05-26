@@ -1,9 +1,11 @@
 // /functions/api/adjunto.ts
 // Proxy seguro para descargar adjuntos de Zoho SDP API v3
-// Soporta: listar adjuntos y descargar archivo binario
+// Soporta: listar adjuntos, descargar archivo binario, verificar IPs y estado de tareas
 
+import * as XLSX from "xlsx";
 import { getAccessToken, forceRefreshToken, validateOrigin, corsHeaders, errorResponse } from "./_shared/zoho-auth";
 import { applyApiGuards, isNumericId, sanitizeQuery } from "./_shared/security";
+import { IP_SHEET_NAME, sheetHasIps } from "./_shared/ipDetect";
 import type { ZohoEnv } from "./_shared/zoho-auth";
 
 // Tamaño máximo de adjunto a re-transmitir (evita presión de memoria / abuso).
@@ -11,6 +13,33 @@ const MAX_ATTACHMENT_BYTES = 25 * 1024 * 1024; // 25 MB
 
 const SDP_BASE_URL = "https://sdpondemand.manageengine.com/api/v3";
 const COMUNICADO_REGEX = /COMUNICADO[-_ ]*(\d+)/i;
+
+// Status de tarea que se considera "cerrada/hecha" (soporte español e inglés).
+const CLOSED_STATUS_NAMES = new Set(["closed", "cerrado", "cerrada"]);
+
+// TTLs de caché KV para ipcheck.
+const IPCHECK_TTL_WITH_ATTACHMENT = 60 * 60 * 24 * 30; // 30 días (contenido inmutable)
+const IPCHECK_TTL_NO_ATTACHMENT = 60 * 5;               // 5 min (aún no tienen adjunto)
+
+/**
+ * Valida que un content_url de SDP sea una ruta relativa segura.
+ * Previene SSRF si la respuesta de SDP fuera manipulada.
+ */
+function isSafeContentUrl(url: string | undefined | null): url is string {
+  if (!url || typeof url !== "string") return false;
+  // Debe ser ruta relativa: empieza con "/" pero NO con "//" (protocol-relative).
+  if (!url.startsWith("/") || url.startsWith("//")) return false;
+  // No debe contener esquema, @ (user:pass@host) ni caracteres de control.
+  if (/[://]/.test(url.slice(1))) return false;
+  if (url.includes("@")) return false;
+  if (/[\r\n\t ]/.test(url)) return false;
+  return true;
+}
+
+function isTaskClosed(statusName: unknown): boolean {
+  if (!statusName || typeof statusName !== "string") return false;
+  return CLOSED_STATUS_NAMES.has(statusName.trim().toLowerCase());
+}
 
 interface SdpAttachment {
   id?: number;
@@ -174,13 +203,17 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
         headers: { "Content-Type": "application/json", ...corsHeaders(env) },
       });
     }
-    // ═══ ACTION: Verificar si un request tiene tareas ═══
+    // ═══ ACTION: Verificar tareas de un request (estado: ninguna / colocada / hecha) ═══
     if (action === "tasks") {
       const requestId = url.searchParams.get("requestId");
       if (!isNumericId(requestId)) return errorResponse(env, 400, "requestId inválido.");
 
       const inputData = {
-        list_info: { row_count: 1, start_index: 1 },
+        list_info: {
+          row_count: 50,
+          start_index: 1,
+          fields_required: ["status"],
+        },
       };
       const params = new URLSearchParams({ input_data: JSON.stringify(inputData) });
 
@@ -204,21 +237,24 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
       }
 
       if (response.status === 404) {
-        return new Response(JSON.stringify({ data: { hasTasks: false }, status: "success" }), {
-          status: 200,
-          headers: { "Content-Type": "application/json", ...corsHeaders(env) },
-        });
+        return new Response(
+          JSON.stringify({ data: { hasTasks: false, done: false }, status: "success" }),
+          { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders(env) } }
+        );
       }
 
       if (!response.ok) throw new Error(`SDP tasks error: ${response.status}`);
 
       const data = (await response.json()) as any;
-      const hasTasks = Array.isArray(data.tasks) && data.tasks.length > 0;
+      const tasks: any[] = Array.isArray(data.tasks) ? data.tasks : [];
+      const hasTasks = tasks.length > 0;
+      // "done" solo cuando TODAS las tareas están cerradas (ningún trabajo pendiente).
+      const done = hasTasks && tasks.every((t: any) => isTaskClosed(t.status?.name));
 
-      return new Response(JSON.stringify({ data: { hasTasks }, status: "success" }), {
-        status: 200,
-        headers: { "Content-Type": "application/json", ...corsHeaders(env) },
-      });
+      return new Response(
+        JSON.stringify({ data: { hasTasks, done }, status: "success" }),
+        { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders(env) } }
+      );
     }
 
     // ═══ ACTION: Listar adjuntos de un request ═══
@@ -302,11 +338,12 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
       }
 
       const metaData = await metaResponse.json() as any;
-      const contentUrl = metaData.request_attachment?.content_url;
-      const originalName = metaData.request_attachment?.name || "comunicado.xlsx";
+      const contentUrl: unknown = metaData.request_attachment?.content_url;
+      const originalName: string = metaData.request_attachment?.name || "comunicado.xlsx";
 
-      if (!contentUrl) {
-        throw new Error("No se encontró content_url en los metadatos del adjunto.");
+      // Hardening anti-SSRF: validar que content_url es una ruta relativa segura.
+      if (!isSafeContentUrl(contentUrl)) {
+        throw new Error("content_url inválido o inseguro en metadatos del adjunto.");
       }
 
       // 2. DESCARGAR EL ARCHIVO BINARIO USANDO EL CONTENT_URL
@@ -347,7 +384,138 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
       });
     }
 
-    return errorResponse(env, 400, "Acción no reconocida. Use: search, list, download.");
+    // ═══ ACTION: Verificar si un request tiene IPs en su xlsx (con caché KV) ═══
+    if (action === "ipcheck") {
+      const requestId = url.searchParams.get("requestId");
+      if (!isNumericId(requestId)) return errorResponse(env, 400, "requestId inválido.");
+
+      // 1. Caché KV — evita golpear SDP en listados repetidos.
+      const cacheKey = `ipcheck:${requestId}`;
+      const cached = await env.KV_ZOHO.get(cacheKey);
+      if (cached !== null) {
+        return new Response(
+          JSON.stringify({ data: { hasIps: cached === "1" }, status: "success" }),
+          { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders(env) } }
+        );
+      }
+
+      // 2. Listar adjuntos: buscar el primer .xlsx.
+      let listResp = await fetch(`${SDP_BASE_URL}/requests/${requestId}/attachments`, {
+        method: "GET",
+        headers: {
+          Authorization: `Zoho-oauthtoken ${accessToken}`,
+          Accept: "application/vnd.manageengine.sdp.v3+json",
+        },
+      });
+      if (listResp.status === 401) {
+        accessToken = await forceRefreshToken(env);
+        listResp = await fetch(`${SDP_BASE_URL}/requests/${requestId}/attachments`, {
+          method: "GET",
+          headers: {
+            Authorization: `Zoho-oauthtoken ${accessToken}`,
+            Accept: "application/vnd.manageengine.sdp.v3+json",
+          },
+        });
+      }
+      if (!listResp.ok) throw new Error(`SDP attachments error: ${listResp.status}`);
+
+      const listData = (await listResp.json()) as any;
+      const xlsxAttachment = ((listData.attachments as any[]) || []).find(
+        (a: any) => typeof a.name === "string" && a.name.toLowerCase().endsWith(".xlsx")
+      );
+
+      if (!xlsxAttachment) {
+        // Sin adjunto aún — caché corta para no bloquear permanentemente.
+        await env.KV_ZOHO.put(cacheKey, "0", { expirationTtl: IPCHECK_TTL_NO_ATTACHMENT });
+        return new Response(
+          JSON.stringify({ data: { hasIps: false }, status: "success" }),
+          { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders(env) } }
+        );
+      }
+
+      // 3. Obtener metadata del adjunto para extraer content_url.
+      let metaResp = await fetch(
+        `${SDP_BASE_URL}/requests/${requestId}/attachments/${xlsxAttachment.id}`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Zoho-oauthtoken ${accessToken}`,
+            Accept: "application/vnd.manageengine.sdp.v3+json",
+          },
+        }
+      );
+      if (metaResp.status === 401) {
+        accessToken = await forceRefreshToken(env);
+        metaResp = await fetch(
+          `${SDP_BASE_URL}/requests/${requestId}/attachments/${xlsxAttachment.id}`,
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Zoho-oauthtoken ${accessToken}`,
+              Accept: "application/vnd.manageengine.sdp.v3+json",
+            },
+          }
+        );
+      }
+      if (!metaResp.ok) throw new Error(`SDP attachment meta error: ${metaResp.status}`);
+
+      const metaData = (await metaResp.json()) as any;
+      const contentUrl: unknown = metaData.request_attachment?.content_url;
+
+      // 4. Hardening anti-SSRF: validar que content_url es una ruta relativa segura.
+      if (!isSafeContentUrl(contentUrl)) {
+        console.error("ipcheck: content_url inválido o inseguro:", contentUrl);
+        return errorResponse(env, 502, "Respuesta de adjunto no válida.");
+      }
+
+      // 5. Descargar el xlsx. Guard de tamaño anti-DoS.
+      let dlResp = await fetch(`${SDP_BASE_URL}${contentUrl}`, {
+        method: "GET",
+        headers: { Authorization: `Zoho-oauthtoken ${accessToken}` },
+      });
+      if (!dlResp.ok) throw new Error(`SDP download error: ${dlResp.status}`);
+
+      const declaredSize = parseInt(dlResp.headers.get("Content-Length") || "0", 10);
+      if (declaredSize > MAX_ATTACHMENT_BYTES) return errorResponse(env, 413, "Adjunto demasiado grande.");
+
+      const fileBytes = await dlResp.arrayBuffer();
+      if (fileBytes.byteLength > MAX_ATTACHMENT_BYTES) return errorResponse(env, 413, "Adjunto demasiado grande.");
+
+      // 6. Parsear solo la hoja IP con SheetJS. Captura zip-bomb/archivos corruptos.
+      let hasIps = false;
+      try {
+        const wb = XLSX.read(new Uint8Array(fileBytes), { type: "array", sheets: IP_SHEET_NAME });
+        const sheetName = wb.SheetNames.find(
+          (n) => n.trim().toUpperCase() === IP_SHEET_NAME.toUpperCase()
+        );
+        if (sheetName) {
+          const rawData: unknown[][] = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {
+            header: 1,
+            defval: null,
+          });
+          hasIps = sheetHasIps(rawData);
+        }
+      } catch {
+        // Xlsx corrupto o ilegible: no cachear, devolver false conservadoramente.
+        return new Response(
+          JSON.stringify({ data: { hasIps: false }, status: "success" }),
+          { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders(env) } }
+        );
+      }
+
+      // 7. Cachear resultado en KV (TTL largo: contenido de adjunto es inmutable).
+      // Solo se expone el booleano, nunca el contenido ni las IPs.
+      await env.KV_ZOHO.put(cacheKey, hasIps ? "1" : "0", {
+        expirationTtl: IPCHECK_TTL_WITH_ATTACHMENT,
+      });
+
+      return new Response(
+        JSON.stringify({ data: { hasIps }, status: "success" }),
+        { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders(env) } }
+      );
+    }
+
+    return errorResponse(env, 400, "Acción no reconocida. Use: search, active, list, download, tasks, ipcheck.");
 
   } catch (error: any) {
     console.error("Adjunto proxy error:", error.message);

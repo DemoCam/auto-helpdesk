@@ -3,17 +3,23 @@
 // Usa SheetJS (xlsx) para leer el Excel en el navegador
 
 import * as XLSX from "xlsx";
+import {
+  IP_SHEET_NAME,
+  HEADER_ROW_NUMBER,
+  normalizeText,
+  normalizeHeader,
+  defangToNormal,
+  isValidIpv4,
+  extractIpsFromValue,
+} from "../../functions/api/_shared/ipDetect";
 
 // ═══════════════════════════════════════════
 // CONSTANTES
 // ═══════════════════════════════════════════
 
 const HASH_SHEET_NAME = "HASH";
-const IP_SHEET_NAME = "IP";
-const HEADER_ROW_NUMBER = 4; // Fila 4 (1-indexed)
 const SOURCE_VALUE = "user";
 const COMUNICADO_REGEX = /COMUNICADO[-_ ]*(\d+)/i;
-const IPV4_REGEX = /(?<![.\d])(?:\d{1,3}\.){3}\d{1,3}(?![.\d])/g;
 const MAX_IPS_PER_RULE = 49;
 
 // ═══════════════════════════════════════════
@@ -81,20 +87,6 @@ export interface IpProcessResult {
 // ═══════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════
-
-function normalizeText(value: unknown): string {
-  if (value === null || value === undefined) return "";
-  return String(value).replace(/\xa0/g, " ").trim();
-}
-
-function normalizeHeader(value: unknown): string {
-  let text = normalizeText(value);
-  // Remove accents
-  text = text.normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
-  text = text.replace(/_/g, " ");
-  text = text.replace(/\s+/g, " ").trim();
-  return text.toUpperCase();
-}
 
 export function extractComunicadoNumber(filename: string): string {
   const match = COMUNICADO_REGEX.exec(filename);
@@ -246,50 +238,6 @@ export function generateAllCsvs(hashResult: HashProcessResult): Record<string, s
 // ═══════════════════════════════════════════
 // IPs / SENTINELONE FIREWALL CONTROL
 // ═══════════════════════════════════════════
-
-/**
- * Defanga un texto de IP ofuscada a formato normal.
- */
-export function defangToNormal(text: string): string {
-  let result = normalizeText(text);
-  const replacements: Record<string, string> = {
-    "[.]": ".",
-    "(.)": ".",
-    "{.}": ".",
-    "[dot]": ".",
-    "(dot)": ".",
-    "hxxp://": "http://",
-    "hxxps://": "https://",
-  };
-  for (const [from, to] of Object.entries(replacements)) {
-    result = result.split(from).join(to);
-    result = result.split(from.toUpperCase()).join(to);
-  }
-  return result;
-}
-
-/**
- * Valida si una cadena es una IPv4 válida.
- */
-export function isValidIpv4(ip: string): boolean {
-  const parts = ip.split(".");
-  if (parts.length !== 4) return false;
-  return parts.every((p) => {
-    const n = parseInt(p, 10);
-    return !isNaN(n) && n >= 0 && n <= 255 && String(n) === p;
-  });
-}
-
-/**
- * Extrae IPs válidas de un texto (puede tener IPs defangadas).
- */
-export function extractIpsFromValue(value: unknown): string[] {
-  const text = defangToNormal(normalizeText(value));
-  if (!text) return [];
-
-  const matches = text.match(IPV4_REGEX) || [];
-  return matches.filter(isValidIpv4);
-}
 
 /**
  * Deduplicar preservando el orden original.

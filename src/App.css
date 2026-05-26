@@ -1766,6 +1766,31 @@ tbody tr:nth-child(even):hover {
   border: 1px solid #E5E7EB;
 }
 
+/* 4 estados de badge: done / placed / falta / no-requiere */
+.hash-tasks-badge--done {
+  background: var(--green-light);
+  color: var(--green-dark);
+  border: 1px solid rgba(0, 176, 80, 0.25);
+}
+
+.hash-tasks-badge--placed {
+  background: #EFF6FF;
+  color: #1D4ED8;
+  border: 1px solid #BFDBFE;
+}
+
+.hash-tasks-badge--falta {
+  background: #FEF2F2;
+  color: #B91C1C;
+  border: 1px solid #FCA5A5;
+}
+
+.hash-tasks-badge--norequiere {
+  background: #F3F4F6;
+  color: #9CA3AF;
+  border: 1px solid #E5E7EB;
+}
+
 .hash-error-box {
   display: flex;
   align-items: center;

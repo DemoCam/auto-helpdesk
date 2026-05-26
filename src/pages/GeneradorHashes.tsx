@@ -2,7 +2,7 @@ import React, { useCallback, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 import { useHashStore } from '../store/useHashStore';
-import { searchComunicados, listAttachments, downloadAttachment, fetchActiveComunicados, checkRequestHasTasks } from '../utils/apiClient';
+import { searchComunicados, listAttachments, downloadAttachment, fetchActiveComunicados, checkRequestHasTasks, checkRequestHasIps } from '../utils/apiClient';
 import {
   readHashSheet, readIpSheet, generateAllCsvs, generateRulesJson,
   type HashProcessResult, type IpProcessResult
@@ -18,25 +18,66 @@ const GeneradorHashes: React.FC<Props> = ({ showNotification }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activeTab, setActiveTab] = useState<'search' | 'upload'>('search');
   const [selectedRequest, setSelectedRequest] = useState<{ id: number; displayId: string; subject: string } | null>(null);
-  const [taskMap, setTaskMap] = useState<Record<number, 'loading' | 'yes' | 'no'>>({});
 
-  // Consulta paralela de tareas cuando cambian los resultados de búsqueda
-  React.useEffect(() => {
-    if (store.searchResults.length === 0) {
-      setTaskMap({});
-      return;
-    }
-    const initial: Record<number, 'loading' | 'yes' | 'no'> = {};
-    store.searchResults.forEach(r => { initial[r.id] = 'loading'; });
-    setTaskMap(initial);
+  // 4 estados: loading-task / done / placed / checking-ip / falta / no-requiere
+  type BadgeState = 'loading-task' | 'done' | 'placed' | 'checking-ip' | 'falta' | 'no-requiere';
+  const [badgeMap, setBadgeMap] = useState<Record<number, BadgeState>>({});
 
-    store.searchResults.forEach(async (r) => {
-      try {
-        const hasTasks = await checkRequestHasTasks(String(r.id));
-        setTaskMap(prev => ({ ...prev, [r.id]: hasTasks ? 'yes' : 'no' }));
-      } catch {
-        setTaskMap(prev => ({ ...prev, [r.id]: 'no' }));
+  // Pool de concurrencia para no disparar N peticiones simultáneas (rate-limit: 60/min).
+  async function runWithConcurrency<T>(
+    items: T[],
+    limit: number,
+    fn: (item: T) => Promise<void>
+  ): Promise<void> {
+    let idx = 0;
+    async function worker() {
+      while (idx < items.length) {
+        const item = items[idx++];
+        await fn(item);
       }
+    }
+    await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  }
+
+  // Resolución en 2 fases: primero tareas (barato), luego IPs solo para los sin tarea.
+  React.useEffect(() => {
+    const results = store.searchResults;
+    if (results.length === 0) { setBadgeMap({}); return; }
+
+    const initial: Record<number, BadgeState> = {};
+    results.forEach(r => { initial[r.id] = 'loading-task'; });
+    setBadgeMap(initial);
+
+    const noTaskIds: number[] = [];
+
+    // Fase 1: verificar estado de tareas (concurrencia ≤6).
+    runWithConcurrency(results, 6, async (r) => {
+      try {
+        const { hasTasks, done } = await checkRequestHasTasks(String(r.id));
+        if (done) {
+          setBadgeMap(prev => ({ ...prev, [r.id]: 'done' }));
+        } else if (hasTasks) {
+          setBadgeMap(prev => ({ ...prev, [r.id]: 'placed' }));
+        } else {
+          setBadgeMap(prev => ({ ...prev, [r.id]: 'checking-ip' }));
+          noTaskIds.push(r.id);
+        }
+      } catch {
+        setBadgeMap(prev => ({ ...prev, [r.id]: 'checking-ip' }));
+        noTaskIds.push(r.id);
+      }
+    }).then(() => {
+      // Fase 2: solo para los sin tarea, verificar IPs (concurrencia ≤4, más costoso).
+      if (noTaskIds.length === 0) return;
+      runWithConcurrency(noTaskIds, 4, async (id) => {
+        try {
+          const hasIps = await checkRequestHasIps(String(id));
+          setBadgeMap(prev => ({ ...prev, [id]: hasIps ? 'falta' : 'no-requiere' }));
+        } catch {
+          // Error: dejar en 'checking-ip' no bloquea, pero actualizamos a estado neutro.
+          setBadgeMap(prev => ({ ...prev, [id]: 'no-requiere' }));
+        }
+      });
     });
   }, [store.searchResults]);
 
@@ -269,16 +310,22 @@ const GeneradorHashes: React.FC<Props> = ({ showNotification }) => {
                   <div key={r.id} className={`hash-result-item ${selectedRequest?.id === r.id ? 'hash-result-item--selected' : ''}`} onClick={() => setSelectedRequest(r)}>
                     <span className="hash-result-id">#{r.displayId}</span>
                     <span className="hash-result-subject">{r.subject}</span>
-                    {taskMap[r.id] === 'loading' && (
-                      <span className="hash-tasks-badge hash-tasks-badge--loading">
+                    {(badgeMap[r.id] === 'loading-task' || badgeMap[r.id] === 'checking-ip') && (
+                      <span className="hash-tasks-badge hash-tasks-badge--loading" title={badgeMap[r.id] === 'checking-ip' ? 'Verificando IPs...' : 'Verificando tareas...'}>
                         <svg className="spinner" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><circle cx="12" cy="12" r="10" strokeOpacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round"/></svg>
                       </span>
                     )}
-                    {taskMap[r.id] === 'yes' && (
-                      <span className="hash-tasks-badge hash-tasks-badge--yes">Tareas: Sí</span>
+                    {badgeMap[r.id] === 'done' && (
+                      <span className="hash-tasks-badge hash-tasks-badge--done">Tarea hecha</span>
                     )}
-                    {taskMap[r.id] === 'no' && (
-                      <span className="hash-tasks-badge hash-tasks-badge--no">Tareas: No</span>
+                    {badgeMap[r.id] === 'placed' && (
+                      <span className="hash-tasks-badge hash-tasks-badge--placed">Tarea colocada</span>
+                    )}
+                    {badgeMap[r.id] === 'falta' && (
+                      <span className="hash-tasks-badge hash-tasks-badge--falta">Falta tarea</span>
+                    )}
+                    {badgeMap[r.id] === 'no-requiere' && (
+                      <span className="hash-tasks-badge hash-tasks-badge--norequiere">No requiere tarea</span>
                     )}
                     {selectedRequest?.id === r.id && (
                       <button className="btn-fetch btn-fetch--sm" onClick={(e) => { e.stopPropagation(); handleDownloadFromZoho(r.id, r.subject || ''); }}>

@@ -112,14 +112,30 @@ export async function downloadAttachment(
 }
 
 /**
- * Verifica si un request tiene al menos una tarea asociada.
+ * Verifica el estado de tareas de un request.
+ * - hasTasks: si existe al menos una tarea.
+ * - done: si todas las tareas están cerradas (status Closed/Cerrado).
  */
-export async function checkRequestHasTasks(requestId: string): Promise<boolean> {
-  const resp = await fetchFromProxy<ApiResponse<{ hasTasks: boolean }>>("/api/adjunto", {
-    action: "tasks",
+export async function checkRequestHasTasks(
+  requestId: string
+): Promise<{ hasTasks: boolean; done: boolean }> {
+  const resp = await fetchFromProxy<ApiResponse<{ hasTasks: boolean; done: boolean }>>(
+    "/api/adjunto",
+    { action: "tasks", requestId }
+  );
+  return { hasTasks: resp.data.hasTasks, done: resp.data.done };
+}
+
+/**
+ * Verifica si el xlsx de un request contiene IPs en la hoja IP.
+ * El resultado es cacheado en KV por el backend (inmutable por adjunto).
+ */
+export async function checkRequestHasIps(requestId: string): Promise<boolean> {
+  const resp = await fetchFromProxy<ApiResponse<{ hasIps: boolean }>>("/api/adjunto", {
+    action: "ipcheck",
     requestId,
   });
-  return resp.data.hasTasks;
+  return resp.data.hasIps;
 }
 
 export { ApiError };
