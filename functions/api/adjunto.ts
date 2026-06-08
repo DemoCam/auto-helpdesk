@@ -391,7 +391,9 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
       if (!isNumericId(requestId)) return errorResponse(env, 400, "requestId inválido.");
 
       // 1. Caché KV — evita golpear SDP en listados repetidos.
-      const cacheKey = `ipcheck:${requestId}`;
+      // v2: invalida en masa las entradas envenenadas por el bug de la hoja "IP "
+      // (el parser devolvía hasIps=false y se cacheaba "0" durante 30 días).
+      const cacheKey = `ipcheck:v2:${requestId}`;
       const cached = await env.KV_ZOHO.get(cacheKey);
       if (cached !== null) {
         return new Response(
@@ -485,12 +487,17 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
       // 6. Parsear solo la hoja IP con SheetJS. Captura zip-bomb/archivos corruptos.
       let hasIps = false;
       try {
-        const wb = XLSX.read(new Uint8Array(fileBytes), { type: "array", sheets: IP_SHEET_NAME });
+        // NO usar la opción { sheets } de SheetJS: filtra por nombre EXACTO (sensible a
+        // espacios), y la hoja real se llama "IP " (con espacio final). Eso dejaba
+        // wb.Sheets["IP "] = undefined → sheet_to_json vacío → hasIps siempre false.
+        // Leemos todo el workbook (son pocas hojas pequeñas) y emparejamos con trim/upper.
+        const wb = XLSX.read(new Uint8Array(fileBytes), { type: "array" });
         const sheetName = wb.SheetNames.find(
           (n) => n.trim().toUpperCase() === IP_SHEET_NAME.toUpperCase()
         );
-        if (sheetName) {
-          const rawData: unknown[][] = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {
+        const sheet = sheetName ? wb.Sheets[sheetName] : undefined;
+        if (sheet) {
+          const rawData: unknown[][] = XLSX.utils.sheet_to_json(sheet, {
             header: 1,
             defval: null,
           });
