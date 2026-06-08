@@ -19,8 +19,8 @@ const GeneradorHashes: React.FC<Props> = ({ showNotification }) => {
   const [activeTab, setActiveTab] = useState<'search' | 'upload'>('search');
   const [selectedRequest, setSelectedRequest] = useState<{ id: number; displayId: string; subject: string } | null>(null);
 
-  // 4 estados: loading-task / done / placed / checking-ip / falta / no-requiere
-  type BadgeState = 'loading-task' | 'done' | 'placed' | 'checking-ip' | 'falta' | 'no-requiere';
+  // Estados: loading-task / done / placed / checking-ip / falta / no-requiere / error
+  type BadgeState = 'loading-task' | 'done' | 'placed' | 'checking-ip' | 'falta' | 'no-requiere' | 'error';
   const [badgeMap, setBadgeMap] = useState<Record<number, BadgeState>>({});
 
   // Pool de concurrencia para no disparar N peticiones simultáneas (rate-limit: 60/min).
@@ -74,8 +74,9 @@ const GeneradorHashes: React.FC<Props> = ({ showNotification }) => {
           const hasIps = await checkRequestHasIps(String(id));
           setBadgeMap(prev => ({ ...prev, [id]: hasIps ? 'falta' : 'no-requiere' }));
         } catch {
-          // Error: dejar en 'checking-ip' no bloquea, pero actualizamos a estado neutro.
-          setBadgeMap(prev => ({ ...prev, [id]: 'no-requiere' }));
+          // Un fallo de red/rate-limit/auth NO significa "no requiere tarea":
+          // marcamos estado de error visible para no clasificar mal el comunicado.
+          setBadgeMap(prev => ({ ...prev, [id]: 'error' }));
         }
       });
     });
@@ -326,6 +327,9 @@ const GeneradorHashes: React.FC<Props> = ({ showNotification }) => {
                     )}
                     {badgeMap[r.id] === 'no-requiere' && (
                       <span className="hash-tasks-badge hash-tasks-badge--norequiere">No requiere tarea</span>
+                    )}
+                    {badgeMap[r.id] === 'error' && (
+                      <span className="hash-tasks-badge hash-tasks-badge--error" title="No se pudo verificar (red/límite de tasa). Recarga para reintentar.">Error al verificar</span>
                     )}
                     {selectedRequest?.id === r.id && (
                       <button className="btn-fetch btn-fetch--sm" onClick={(e) => { e.stopPropagation(); handleDownloadFromZoho(r.id, r.subject || ''); }}>

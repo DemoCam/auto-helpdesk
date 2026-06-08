@@ -1791,6 +1791,14 @@ tbody tr:nth-child(even):hover {
   border: 1px solid #E5E7EB;
 }
 
+/* Error al verificar IPs (red/rate-limit/auth): NO confundir con "no requiere". */
+.hash-tasks-badge--error {
+  background: #FFFBEB;
+  color: #B45309;
+  border: 1px solid #FDE68A;
+  cursor: default;
+}
+
 .hash-error-box {
   display: flex;
   align-items: center;
