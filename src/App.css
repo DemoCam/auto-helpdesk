@@ -178,8 +178,10 @@
 }
 
 .spinner {
+  display: block;
   animation: spin 1s linear infinite;
   transform-origin: center;
+  transform-box: border-box; /* centro de la caja = centro del viewBox = eje real, sin giro chueco */
 }
 
 @keyframes spin {
@@ -1370,8 +1372,18 @@ tbody tr:nth-child(even):hover {
 }
 
 .loading-spinner {
-  animation: spin 1s linear infinite;
   margin-bottom: 16px;
+  line-height: 0; /* elimina el hueco de baseline del SVG inline */
+}
+
+/* La animación va sobre el SVG (no el div), centrada sobre su propia caja
+   para que no gire descentrado/bamboleante. */
+.loading-spinner svg {
+  display: block;
+  margin: 0 auto;
+  animation: spin 1s linear infinite;
+  transform-origin: center;
+  transform-box: border-box;
 }
 
 .loading-message {
