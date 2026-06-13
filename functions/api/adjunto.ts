@@ -21,6 +21,12 @@ const CLOSED_STATUS_NAMES = new Set(["closed", "cerrado", "cerrada"]);
 const IPCHECK_TTL_WITH_ATTACHMENT = 60 * 60 * 24 * 30; // 30 días (contenido inmutable)
 const IPCHECK_TTL_NO_ATTACHMENT = 60 * 5;               // 5 min (aún no tienen adjunto)
 
+// TTL de caché KV para detección de hilos. Corto: un hilo crece mientras el caso
+// sigue Open (pueden engancharse comunicados nuevos), así que no conviene cachear largo.
+const THREAD_TTL = 60 * 5; // 5 min
+// Tope defensivo de correos entrantes a inspeccionar por request (anti-abuso/rate-limit).
+const THREAD_MAX_INBOUND = 25;
+
 /**
  * Valida que un content_url de SDP sea una ruta relativa segura.
  * Previene SSRF si la respuesta de SDP fuera manipulada.
@@ -40,6 +46,23 @@ function isSafeContentUrl(url: string | undefined | null): url is string {
 function isTaskClosed(statusName: unknown): boolean {
   if (!statusName || typeof statusName !== "string") return false;
   return CLOSED_STATUS_NAMES.has(statusName.trim().toLowerCase());
+}
+
+/**
+ * Extrae los números de comunicado DISTINTOS (COMUNICADO-####) de una lista de
+ * textos (asuntos de correos entrantes + nombres de adjuntos). La señal de "hilo"
+ * es contar números distintos, NO el número de correos (los RV:/RE: del mismo
+ * comunicado no deben contar como comunicados extra).
+ */
+function extractComunicadoNumbers(strings: string[]): string[] {
+  const set = new Set<string>();
+  for (const s of strings) {
+    if (!s) continue;
+    const re = /COMUNICADO[-_ ]*(\d+)/gi;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(s)) !== null) set.add(m[1]);
+  }
+  return [...set];
 }
 
 interface SdpAttachment {
@@ -256,6 +279,95 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
         JSON.stringify({ data: { hasTasks, done }, status: "success" }),
         { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders(env) } }
       );
+    }
+
+    // ═══ ACTION: Detectar si un request agrupa varios comunicados (hilo) ═══
+    // SDP engancha comunicados nuevos como correos ENTRANTES dentro de un request
+    // abierto. Esos comunicados NO salen en /attachments; viven en las conversaciones.
+    // Señal de hilo (verificada): nº de números COMUNICADO-#### distintos hallados en
+    // (asuntos entrantes + nombres de adjuntos entrantes). El nº base lo aporta el front.
+    if (action === "thread") {
+      const requestId = url.searchParams.get("requestId");
+      if (!isNumericId(requestId)) return errorResponse(env, 400, "requestId inválido.");
+
+      // GET autenticado con auto-sanación 401 (mismo patrón que el resto del archivo).
+      const sdpGet = async (path: string): Promise<Response> => {
+        let r = await fetch(`${SDP_BASE_URL}${path}`, {
+          method: "GET",
+          headers: {
+            Authorization: `Zoho-oauthtoken ${accessToken}`,
+            Accept: "application/vnd.manageengine.sdp.v3+json",
+          },
+        });
+        if (r.status === 401) {
+          accessToken = await forceRefreshToken(env);
+          r = await fetch(`${SDP_BASE_URL}${path}`, {
+            method: "GET",
+            headers: {
+              Authorization: `Zoho-oauthtoken ${accessToken}`,
+              Accept: "application/vnd.manageengine.sdp.v3+json",
+            },
+          });
+        }
+        return r;
+      };
+
+      const ok = (payload: { threadNumbers: string[]; inboundCount: number }) =>
+        new Response(JSON.stringify({ data: payload, status: "success" }), {
+          status: 200,
+          headers: { "Content-Type": "application/json", ...corsHeaders(env) },
+        });
+
+      // Caché KV corta — evita re-golpear SDP al recargar la lista.
+      const cacheKey = `thread:v1:${requestId}`;
+      const cached = await env.KV_ZOHO.get(cacheKey);
+      if (cached !== null) {
+        try {
+          return ok(JSON.parse(cached));
+        } catch {
+          /* entrada corrupta: ignorar y recalcular */
+        }
+      }
+
+      // 1. Listar conversaciones del request.
+      const convInput = { list_info: { row_count: 100, start_index: 1 } };
+      const convParams = new URLSearchParams({ input_data: JSON.stringify(convInput) });
+      const convResp = await sdpGet(`/requests/${requestId}/conversations?${convParams.toString()}`);
+
+      if (convResp.status === 404) {
+        const payload = { threadNumbers: [], inboundCount: 0 };
+        await env.KV_ZOHO.put(cacheKey, JSON.stringify(payload), { expirationTtl: THREAD_TTL });
+        return ok(payload);
+      }
+      if (!convResp.ok) throw new Error(`SDP conversations error: ${convResp.status}`);
+
+      const convData = (await convResp.json()) as any;
+      const conversations: any[] = Array.isArray(convData.conversations) ? convData.conversations : [];
+      // Solo correos ENTRANTES reales (las demás son notificaciones del System).
+      const inbound = conversations.filter(
+        (c) => typeof c?.type === "string" && c.type.toUpperCase() === "CONVERSATION"
+      );
+
+      // 2. Para cada entrante, bajar al detalle (subject + adjuntos del correo).
+      const textos: string[] = [];
+      for (const c of inbound.slice(0, THREAD_MAX_INBOUND)) {
+        const cid = c?.id;
+        if (!cid) continue;
+        const detResp = await sdpGet(`/requests/${requestId}/notifications/${cid}`);
+        if (!detResp.ok) continue; // tolerante: ignorar conversaciones que fallen puntualmente
+        const detData = (await detResp.json()) as any;
+        const notif = detData.notification || detData.conversation || detData;
+        if (notif?.subject) textos.push(String(notif.subject));
+        const atts: any[] = Array.isArray(notif?.attachments) ? notif.attachments : [];
+        for (const a of atts) {
+          const name = a?.name || a?.file_name;
+          if (name) textos.push(String(name));
+        }
+      }
+
+      const payload = { threadNumbers: extractComunicadoNumbers(textos), inboundCount: inbound.length };
+      await env.KV_ZOHO.put(cacheKey, JSON.stringify(payload), { expirationTtl: THREAD_TTL });
+      return ok(payload);
     }
 
     // ═══ ACTION: Listar adjuntos de un request ═══
@@ -523,7 +635,7 @@ export async function onRequest(context: { request: Request; env: ZohoEnv }) {
       );
     }
 
-    return errorResponse(env, 400, "Acción no reconocida. Use: search, active, list, download, tasks, ipcheck.");
+    return errorResponse(env, 400, "Acción no reconocida. Use: search, active, list, download, tasks, ipcheck, thread.");
 
   } catch (error: any) {
     console.error("Adjunto proxy error:", error.message);

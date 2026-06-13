@@ -97,6 +97,20 @@ export function extractComunicadoNumber(filename: string): string {
   return "XXXX"; // Default si no hay números
 }
 
+/**
+ * Resuelve el número de comunicado para nombrar las salidas (CSV/JSON).
+ * Prefiere el ASUNTO, que es la fuente fiable del número real (`COMUNICADO-1588-...`);
+ * el adjunto se llama `IoCs-...-DDMMAAAA.xlsx`, que solo trae la FECHA, no el número.
+ * Si no hay asunto (p.ej. subida de archivo local) cae al nombre de archivo, como antes.
+ */
+export function resolveComunicadoNumber(subject: string | undefined, filename: string): string {
+  if (subject) {
+    const match = COMUNICADO_REGEX.exec(subject);
+    if (match) return match[1];
+  }
+  return extractComunicadoNumber(filename);
+}
+
 function convertNumber(value: unknown): number | null {
   if (value === null || value === undefined) return null;
   if (typeof value === "number") return value;
@@ -122,7 +136,7 @@ function findSheetByName(workbook: XLSX.WorkBook, targetName: string): string {
  */
 export function readHashSheet(workbook: XLSX.WorkBook, filename: string, subject?: string): HashProcessResult {
   const description = subject || filename.replace(/\.xlsx$/i, "");
-  const comunicadoNumber = extractComunicadoNumber(filename);
+  const comunicadoNumber = resolveComunicadoNumber(subject, filename);
   const warnings: string[] = [];
 
   const sheetName = findSheetByName(workbook, HASH_SHEET_NAME);
@@ -257,7 +271,7 @@ function deduplicatePreservingOrder(values: string[]): string[] {
  */
 export function readIpSheet(workbook: XLSX.WorkBook, filename: string, subject?: string): IpProcessResult {
   const ruleName = subject || filename.replace(/\.xlsx$/i, "");
-  const comunicadoNumber = extractComunicadoNumber(filename);
+  const comunicadoNumber = resolveComunicadoNumber(subject, filename);
   const warnings: string[] = [];
 
   const sheetName = findSheetByName(workbook, IP_SHEET_NAME);

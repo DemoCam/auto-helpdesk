@@ -2,7 +2,7 @@ import React, { useCallback, useRef, useState } from 'react';
 import * as XLSX from 'xlsx';
 import JSZip from 'jszip';
 import { useHashStore } from '../store/useHashStore';
-import { searchComunicados, listAttachments, downloadAttachment, fetchActiveComunicados, checkRequestHasTasks, checkRequestHasIps } from '../utils/apiClient';
+import { searchComunicados, listAttachments, downloadAttachment, fetchActiveComunicados, checkRequestHasTasks, checkRequestHasIps, checkRequestThread } from '../utils/apiClient';
 import {
   readHashSheet, readIpSheet, generateAllCsvs, generateRulesJson,
   type HashProcessResult, type IpProcessResult
@@ -22,6 +22,16 @@ const GeneradorHashes: React.FC<Props> = ({ showNotification }) => {
   // Estados: loading-task / done / placed / checking-ip / falta / no-requiere / error
   type BadgeState = 'loading-task' | 'done' | 'placed' | 'checking-ip' | 'falta' | 'no-requiere' | 'error';
   const [badgeMap, setBadgeMap] = useState<Record<number, BadgeState>>({});
+
+  // Hilo multi-comunicado: null = no es hilo, 'loading' = verificando, {count,numbers} = hilo.
+  type ThreadInfo = 'loading' | null | { count: number; numbers: string[] };
+  const [threadMap, setThreadMap] = useState<Record<number, ThreadInfo>>({});
+
+  // Número de comunicado base tomado del asunto (COMUNICADO-####).
+  const extractNum = (s: string): string => {
+    const m = /COMUNICADO[-_ ]*(\d+)/i.exec(s || '');
+    return m ? m[1] : '';
+  };
 
   // Pool de concurrencia para no disparar N peticiones simultáneas (rate-limit: 60/min).
   async function runWithConcurrency<T>(
@@ -79,6 +89,29 @@ const GeneradorHashes: React.FC<Props> = ({ showNotification }) => {
           setBadgeMap(prev => ({ ...prev, [id]: 'error' }));
         }
       });
+    });
+  }, [store.searchResults]);
+
+  // Detección de hilos: marca los casos que agrupan varios comunicados (≥2 números
+  // distintos entre el asunto base y los correos entrantes del hilo). Solo aviso —
+  // la separación es manual en SDP.
+  React.useEffect(() => {
+    const results = store.searchResults;
+    if (results.length === 0) { setThreadMap({}); return; }
+
+    const initial: Record<number, ThreadInfo> = {};
+    results.forEach(r => { initial[r.id] = 'loading'; });
+    setThreadMap(initial);
+
+    runWithConcurrency(results, 6, async (r) => {
+      try {
+        const { threadNumbers } = await checkRequestThread(String(r.id));
+        const all = [...new Set([extractNum(r.subject), ...threadNumbers].filter(Boolean))];
+        setThreadMap(prev => ({ ...prev, [r.id]: all.length >= 2 ? { count: all.length, numbers: all } : null }));
+      } catch {
+        // Un fallo de red/tasa no debe marcar falsamente como hilo: lo dejamos sin badge.
+        setThreadMap(prev => ({ ...prev, [r.id]: null }));
+      }
     });
   }, [store.searchResults]);
 
@@ -307,10 +340,17 @@ const GeneradorHashes: React.FC<Props> = ({ showNotification }) => {
             </div>
             {store.searchResults.length > 0 && (
               <div className="hash-search-results">
-                {store.searchResults.map(r => (
+                {store.searchResults.map(r => {
+                  const thread = threadMap[r.id];
+                  return (
                   <div key={r.id} className={`hash-result-item ${selectedRequest?.id === r.id ? 'hash-result-item--selected' : ''}`} onClick={() => setSelectedRequest(r)}>
                     <span className="hash-result-id">#{r.displayId}</span>
                     <span className="hash-result-subject">{r.subject}</span>
+                    {thread && thread !== 'loading' && (
+                      <span className="hash-tasks-badge hash-tasks-badge--thread" title={`Este caso agrupa ${thread.count} comunicados (${thread.numbers.join(', ')}). Sepáralos manualmente en SDP y procesa cada uno por separado.`}>
+                        ⚠ Hilo: {thread.count} comunicados sin separar
+                      </span>
+                    )}
                     {(badgeMap[r.id] === 'loading-task' || badgeMap[r.id] === 'checking-ip') && (
                       <span className="hash-tasks-badge hash-tasks-badge--loading" title={badgeMap[r.id] === 'checking-ip' ? 'Verificando IPs...' : 'Verificando tareas...'}>
                         <svg className="spinner" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3"><circle cx="12" cy="12" r="10" strokeOpacity="0.25"/><path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round"/></svg>
@@ -337,7 +377,8 @@ const GeneradorHashes: React.FC<Props> = ({ showNotification }) => {
                       </button>
                     )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

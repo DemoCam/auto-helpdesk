@@ -1811,6 +1811,14 @@ tbody tr:nth-child(even):hover {
   cursor: default;
 }
 
+/* Hilo multi-comunicado: el caso agrupa varios comunicados (separar manual en SDP). */
+.hash-tasks-badge--thread {
+  background: #FFF7ED;
+  color: #C2410C;
+  border: 1px solid #FED7AA;
+  cursor: help;
+}
+
 .hash-error-box {
   display: flex;
   align-items: center;

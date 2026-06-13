@@ -138,4 +138,23 @@ export async function checkRequestHasIps(requestId: string): Promise<boolean> {
   return resp.data.hasIps;
 }
 
+/**
+ * Detecta si un request agrupa varios comunicados en un hilo de correos.
+ * Devuelve los números de comunicado hallados en los correos ENTRANTES del hilo
+ * (sin el número base, que el frontend ya conoce desde el asunto que muestra) y
+ * cuántos correos entrantes hay. El llamador une base + threadNumbers para decidir.
+ */
+export async function checkRequestThread(
+  requestId: string
+): Promise<{ threadNumbers: string[]; inboundCount: number }> {
+  const resp = await fetchFromProxy<ApiResponse<{ threadNumbers: string[]; inboundCount: number }>>(
+    "/api/adjunto",
+    { action: "thread", requestId }
+  );
+  return {
+    threadNumbers: resp.data.threadNumbers || [],
+    inboundCount: resp.data.inboundCount || 0,
+  };
+}
+
 export { ApiError };
